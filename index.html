@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Renov Disparador</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0f1117;
+      --card:        #1a1d27;
+      --card2:       #20243a;
+      --border:      #2d3148;
+      --accent:      #22c55e;
+      --accent-dim:  #16a34a;
+      --accent-glow: rgba(34,197,94,0.15);
+      --red:         #ef4444;
+      --red-dim:     #dc2626;
+      --yellow:      #f59e0b;
+      --blue:        #3b82f6;
+      --blue-glow:   rgba(59,130,246,0.15);
+      --text:        #f1f5f9;
+      --text-2:      #94a3b8;
+      --text-3:      #64748b;
+      --radius:      14px;
+      --radius-sm:   8px;
+      --step-size:   40px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .app { width: 100%; max-width: 760px; padding: 0 20px 60px; }
+
+    /* ── Header ── */
+    .app-header {
+      display: flex; align-items: center; gap: 14px;
+      padding: 32px 0 28px;
+    }
+    .header-logo {
+      width: 46px; height: 46px;
+      background: linear-gradient(135deg, var(--accent), #15803d);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 24px var(--accent-glow);
+      flex-shrink: 0;
+    }
+    .header-text h1 {
+      font-size: 20px; font-weight: 700; letter-spacing: -0.3px;
+      background: linear-gradient(90deg, #fff 60%, var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header-text p { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+
+    /* ── Stepper ── */
+    .stepper {
+      display: flex; align-items: center;
+      margin-bottom: 32px; position: relative;
+    }
+    .step-item {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 8px; flex-shrink: 0; position: relative; z-index: 1;
+    }
+    .step-bubble {
+      width: var(--step-size); height: var(--step-size);
+      border-radius: 50%; border: 2px solid var(--border);
+      background: var(--card);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: var(--text-3);
+      transition: all 0.3s ease; position: relative;
+    }
+    .step-label {
+      font-size: 11px; font-weight: 500; color: var(--text-3);
+      white-space: nowrap; transition: color 0.3s;
+    }
+    .step-line {
+      flex: 1; height: 2px; background: var(--border);
+      margin-bottom: 26px; position: relative; overflow: hidden;
+    }
+    .step-line-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 0%; background: var(--accent); transition: width 0.5s ease;
+    }
+    .step-item.active .step-bubble {
+      border-color: var(--accent); background: var(--accent-glow);
+      color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+    .step-item.active .step-label { color: var(--accent); }
+    .step-item.done .step-bubble {
+      border-color: var(--accent); background: var(--accent); color: #000;
+    }
+    .step-item.done .step-bubble::after { content: '✓'; font-size: 16px; }
+    .step-item.done .step-bubble span { display: none; }
+    .step-item.done .step-label { color: var(--accent); }
+
+    /* ── Card ── */
+    .step-panel { display: none; animation: fadeSlideIn 0.3s ease; }
+    .step-panel.active { display: block; }
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px;
+    }
+    .card-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.2px; }
+    .card-sub { font-size: 13px; color: var(--text-2); margin-bottom: 24px; line-height: 1.5; }
+
+    /* ── Nav ── */
+    .step-nav {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 20px; gap: 12px;
+    }
+    .step-nav-right { margin-left: auto; display: flex; gap: 10px; }
+
+    /* ── Form ── */
+    label.field-label {
+      display: block; font-size: 11px; font-weight: 600;
+      color: var(--text-2); margin-bottom: 7px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    input[type="text"], input[type="number"], input[type="password"], select, textarea {
+      width: 100%; background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text);
+      font-family: inherit; font-size: 14px; padding: 11px 13px;
+      outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    select {
+      cursor: pointer; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 13px center; padding-right: 38px;
+    }
+    textarea { resize: vertical; min-height: 120px; line-height: 1.7; }
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* ── Buttons ── */
+    button {
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      border: none; border-radius: var(--radius-sm);
+      cursor: pointer; padding: 10px 18px;
+      transition: all 0.15s; display: inline-flex; align-items: center; gap: 7px;
+    }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-primary:hover:not(:disabled) { background: #4ade80; box-shadow: 0 0 20px var(--accent-glow); }
+    .btn-secondary { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+    .btn-secondary:hover:not(:disabled) { background: var(--accent-glow); }
+    .btn-ghost { background: var(--card2); color: var(--text-2); border: 1.5px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--border); color: var(--text); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: var(--red-dim); }
+    .btn-blue { background: var(--blue); color: #fff; }
+    .btn-blue:hover:not(:disabled) { background: #2563eb; box-shadow: 0 0 20px var(--blue-glow); }
+    .btn-lg { padding: 13px 24px; font-size: 15px; font-weight: 700; }
+    .btn-sm { padding: 7px 13px; font-size: 12px; }
+    .btn-icon {
+      background: none; border: none; color: var(--text-3);
+      padding: 4px 7px; cursor: pointer; border-radius: 4px;
+    }
+    .btn-icon:hover { color: var(--red); background: rgba(239,68,68,0.1); }
+
+    /* ── Status dot ── */
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); display: inline-block; }
+    .status-dot.connected { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+    .status-dot.disconnected { background: var(--red); }
+    .status-dot.loading {
+      background: var(--yellow);
+      animation: pulse-dot 1s infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    .instance-row { display: flex; gap: 10px; align-items: center; }
+    .instance-row select { flex: 1; }
+    .instance-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+    .token-row { display: flex; gap: 8px; align-items: center; }
+    .token-row input { flex: 1; }
+
+    /* ── QR Code modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; backdrop-filter: blur(4px);
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px; text-align: center;
+      max-width: 380px; width: 90%;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .modal-sub { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+    .qr-img-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
+    .qr-img-wrap img { width: 220px; height: 220px; border-radius: 12px; border: 3px solid var(--accent); }
+    .pair-code-display {
+      font-size: 36px; font-weight: 900; letter-spacing: 8px;
+      color: var(--accent); background: var(--bg); border: 2px solid var(--accent);
+      border-radius: 10px; padding: 16px 24px; margin-bottom: 20px;
+      font-family: monospace;
+    }
+    .qr-timer { font-size: 12px; color: var(--text-3); margin-bottom: 16px; }
+    .qr-timer span { color: var(--yellow); font-weight: 700; }
+
+    /* ── Tab toggle ── */
+    .tab-toggle {
+      display: flex; gap: 4px;
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); padding: 4px;
+      width: fit-content; margin-bottom: 20px;
+    }
+    .tab-btn {
+      background: transparent; color: var(--text-2);
+      padding: 7px 18px; font-size: 13px; border-radius: 6px;
+      transition: all 0.15s; font-weight: 500; border: none;
+    }
+    .tab-btn.active { background: var(--accent); color: #000; }
+    .tab-btn:hover:not(.active) { background: var(--card2); color: var(--text); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Contacts ── */
+    .manual-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 18px; }
+    .contact-table-wrap { border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; max-height: 280px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: var(--card2); color: var(--text-2); font-weight: 600;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border);
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .empty-state { text-align: center; padding: 32px; color: var(--text-3); }
+    .empty-state .ei { font-size: 30px; margin-bottom: 8px; }
+
+    /* ── Excel ── */
+    .upload-area {
+      border: 2px dashed var(--border); border-radius: var(--radius-sm);
+      padding: 32px; text-align: center; cursor: pointer;
+      transition: all 0.15s; position: relative;
+    }
+    .upload-area:hover { border-color: var(--accent); background: var(--accent-glow); }
+    .upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-area .ui { font-size: 32px; margin-bottom: 8px; }
+    .upload-area p { color: var(--text-2); font-size: 13px; }
+    .col-sel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .preview-wrap { border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: auto; max-height: 160px; margin-bottom: 14px; }
+    .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .preview-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    .preview-table tr.hr td { background: var(--card2); color: var(--accent); font-weight: 700; font-size: 11px; text-transform: uppercase; }
+
+    /* ── Message ── */
+    .placeholder-hint {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px; color: var(--text-2);
+      background: var(--card2); border: 1.5px solid var(--border);
+      border-radius: 6px; padding: 6px 12px; margin-bottom: 12px;
+    }
+    .chip { background: var(--accent-glow); border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; padding: 1px 7px; font-size: 11px; font-weight: 700; font-family: monospace; }
+    .preview-box {
+      background: var(--bg); border: 1.5px solid var(--accent);
+      border-radius: var(--radius-sm); padding: 14px 16px;
+      font-size: 13px; line-height: 1.8; color: var(--text);
+      white-space: pre-wrap; margin-top: 10px;
+    }
+    .preview-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 4px; }
+    .toggle-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--border); margin-top: 16px; cursor: pointer; }
+    .toggle-sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+    .toggle-sw input { opacity: 0; width: 0; height: 0; }
+    .toggle-sl { position: absolute; inset: 0; background: var(--border); border-radius: 11px; transition: 0.2s; cursor: pointer; }
+    .toggle-sl::after { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: 0.2s; }
+    .toggle-sw input:checked + .toggle-sl { background: var(--accent); }
+    .toggle-sw input:checked + .toggle-sl::after { transform: translateX(16px); }
+    .toggle-lbl { font-size: 14px; font-weight: 500; cursor: pointer; user-select: none; }
+    .toggle-lbl small { display: block; font-size: 11px; color: var(--text-2); font-weight: 400; margin-top: 1px; }
+    .var-item { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
+    .var-item textarea { flex: 1; min-height: 80px; }
+    .var-num { font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-glow); border: 1px solid var(--accent); border-radius: 4px; padding: 3px 8px; white-space: nowrap; margin-top: 10px; }
+    .char-count { font-size: 11px; color: var(--text-3); text-align: right; margin-top: 4px; }
+
+    /* ── Delay ── */
+    .delay-visual {
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 16px; background: var(--bg);
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 13px; color: var(--text-2); margin-top: 14px;
+    }
+    .dhl { color: var(--accent); font-weight: 700; }
+
+    /* ── Media ── */
+    .media-section { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+    .media-type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+    .media-type-btn {
+      border: 1.5px solid var(--border); background: var(--bg);
+      color: var(--text-2); border-radius: var(--radius-sm);
+      padding: 10px 8px; text-align: center; cursor: pointer;
+      font-size: 12px; font-weight: 500; transition: all 0.15s;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .media-type-btn .mti { font-size: 20px; }
+    .media-type-btn:hover { border-color: var(--accent); color: var(--text); }
+    .media-type-btn.active { border-color: var(--accent); background: var(--accent-glow); color: var(--accent); }
+
+    /* ── Dispatch ── */
+    .dispatch-big-btn { width: 100%; justify-content: center; margin-bottom: 20px; }
+    .progress-wrap { margin-bottom: 16px; }
+    .progress-header { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; }
+    .progress-pct { color: var(--accent); font-weight: 700; }
+    .progress-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-dim), var(--accent)); border-radius: 4px; width: 0%; transition: width 0.4s ease; }
+    .log-panel {
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); max-height: 300px; overflow-y: auto;
+      font-family: 'Courier New', monospace; font-size: 12px;
+    }
+    .log-entry { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid rgba(45,49,72,0.5); }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: var(--text-3); flex-shrink: 0; width: 58px; }
+    .log-entry.success .log-icon::before { content: '✓'; color: var(--accent); }
+    .log-entry.error .log-icon::before { content: '✗'; color: var(--red); }
+    .log-entry.system .log-icon::before { content: '◆'; color: var(--yellow); }
+    .log-name { color: var(--text); font-weight: 600; }
+    .log-phone { color: var(--text-2); }
+    .log-errmsg { color: var(--red); font-size: 11px; }
+    .log-sysmsg { color: var(--yellow); font-style: italic; flex: 1; }
+
+    /* ── Summary ── */
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .sum-item { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 18px; text-align: center; }
+    .sum-val { font-size: 30px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+    .sum-item.sent .sum-val { color: var(--accent); }
+    .sum-item.errors .sum-val { color: var(--red); }
+    .sum-item.time .sum-val, .sum-item.avg .sum-val { color: var(--text); }
+    .sum-lbl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .sum-interrupted { margin-bottom: 20px; padding: 11px 16px; background: rgba(245,158,11,0.1); border: 1.5px solid rgba(245,158,11,0.3); border-radius: var(--radius-sm); color: #fcd34d; font-size: 13px; text-align: center; }
+    .new-dispatch-box { text-align: center; padding: 24px; border-top: 1px solid var(--border); margin-top: 4px; }
+    .new-dispatch-box p { color: var(--text-2); font-size: 13px; margin-bottom: 16px; }
+
+    /* ── Banners ── */
+    .banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
+    .banner.error { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); }
+    .banner.warning { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
+    .banner.info { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: #93c5fd; }
+    .banner code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    .inline-err { font-size: 12px; color: var(--red); margin-top: 7px; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: #000; font-size: 11px; font-weight: 700; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; }
+    .badge.zero { background: var(--border); color: var(--text-2); }
+
+    /* ── Utilities ── */
+    .hidden { display: none !important; }
+    .mt-12 { margin-top: 12px; }
+    .mt-16 { margin-top: 16px; }
+    .row-end { display: flex; justify-content: flex-end; gap: 8px; }
+    .row-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* ── Connect section ── */
+    .connect-section { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-top: 16px; }
+    .connect-section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); margin-bottom: 12px; }
+    .connect-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    @media (max-width: 600px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .manual-row { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .col-sel-row { grid-template-columns: 1fr; }
+      .stepper { gap: 0; }
+      .step-label { display: none; }
+      .media-type-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-logo">💬</div>
+    <div class="header-text">
+      <h1>Renov Disparador</h1>
+      <p>Disparos em massa com inteligência</p>
+    </div>
+  </header>
+
+  <div id="banner-container"></div>
+
+  <!-- STEPPER -->
+  <div class="stepper" id="stepper">
+    <div class="step-item active" data-step="1">
+      <div class="step-bubble"><span>1</span></div>
+      <div class="step-label">Instância</div>
+    </div>
+    <div class="step-line"><div class="step-line-fill" id="line-1"></div></div>
+    <div class="step-item" data-step="2">
+      <div class="step-bubble"><span>2</span></div>
+      <div class="step-label">Contatos</div>
+    </div>
+    <div class="step-line"><div class="step-line-fill" id="line-2"></div></div>
+    <div class="step-item" data-step="3">
+      <div class="step-bubble"><span>3</span></div>
+      <div class="step-label">Mensagem</div>
+    </div>
+    <div class="step-line"><div class="step-line-fill" id="line-3"></div></div>
+    <div class="step-item" data-step="4">
+      <div class="step-bubble"><span>4</span></div>
+      <div class="step-label">Delay</div>
+    </div>
+    <div class="step-line"><div class="step-line-fill" id="line-4"></div></div>
+    <div class="step-item" data-step="5">
+      <div class="step-bubble"><span>5</span></div>
+      <div class="step-label">Disparar</div>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 1: INSTÂNCIA ════════════════════════════════ -->
+  <div class="step-panel active" data-panel="1">
+    <div class="card">
+      <div class="card-title">Qual instância vamos usar?</div>
+      <div class="card-sub">Selecione a instância do WhatsApp e informe o token de acesso. Se a instância não estiver conectada, use os botões abaixo para conectar.</div>
+
+      <div class="field">
+        <label class="field-label">Instância</label>
+        <div class="instance-row">
+          <select id="instance-select">
+            <option value="">— Clique em Carregar para buscar —</option>
+          </select>
+          <span class="instance-status">
+            <span class="status-dot" id="instance-dot"></span>
+            <span id="instance-status-label">—</span>
+          </span>
+          <button class="btn-ghost btn-sm" id="btn-load-instances">↺ Carregar</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Token da Instância</label>
+        <div class="token-row">
+          <input type="password" id="instance-token" placeholder="Token da instância selecionada" />
+          <button class="btn-icon" id="btn-toggle-token-vis" title="Mostrar/ocultar">👁</button>
+          <button class="btn-ghost btn-sm" id="btn-save-token">💾</button>
+        </div>
+        <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
+      </div>
+
+      <!-- Seção de conexão -->
+      <div class="connect-section">
+        <div class="connect-section-title">🔌 Conectar instância ao WhatsApp</div>
+        <div class="connect-btns">
+          <button class="btn-blue btn-sm" id="btn-show-qr">📷 Conectar via QR Code</button>
+          <button class="btn-ghost btn-sm" id="btn-show-pair">🔢 Conectar via Código</button>
+          <button class="btn-ghost btn-sm" id="btn-check-status">🔄 Verificar Status</button>
+        </div>
+
+        <!-- Pair code input -->
+        <div class="hidden mt-12" id="pair-input-section">
+          <label class="field-label">Número de telefone (com DDI)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="pair-phone" placeholder="Ex: 5511999999999" style="flex:1" />
+            <button class="btn-primary btn-sm" id="btn-request-pair">Gerar Código</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="step-nav">
+      <div></div>
+      <div class="step-nav-right">
+        <button class="btn-primary btn-lg" id="btn-next-1">Próximo →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 2: CONTATOS ══════════════════════════════════ -->
+  <div class="step-panel" data-panel="2">
+    <div class="card">
+      <div class="row-between">
+        <div>
+          <div class="card-title">Quem vai receber? <span class="badge zero" id="contact-count-badge">0</span></div>
+          <div class="card-sub" style="margin-bottom:0">Adicione contatos manualmente ou importe de uma planilha Excel.</div>
+        </div>
+        <button class="btn-ghost btn-sm" id="btn-clear-contacts">🗑 Limpar</button>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="tab-toggle">
+          <button class="tab-btn active" data-tab="manual">✏ Manual</button>
+          <button class="tab-btn" data-tab="excel">📊 Excel</button>
+        </div>
+
+        <!-- Manual -->
+        <div class="tab-content active" id="tab-manual">
+          <div class="manual-row">
+            <div>
+              <label class="field-label">Nome</label>
+              <input type="text" id="input-name" placeholder="Ex: João Silva" />
+            </div>
+            <div>
+              <label class="field-label">Telefone (com DDI)</label>
+              <input type="text" id="input-phone" placeholder="Ex: 5511999999999" />
+            </div>
+            <div>
+              <label class="field-label">&nbsp;</label>
+              <button class="btn-primary" id="btn-add-contact">+ Adicionar</button>
+            </div>
+          </div>
+          <div class="inline-err hidden" id="manual-error"></div>
+        </div>
+
+        <!-- Excel -->
+        <div class="tab-content" id="tab-excel">
+          <div class="upload-area" id="excel-drop-area">
+            <input type="file" id="excel-file" accept=".xlsx,.xls" />
+            <div class="ui">📂</div>
+            <p><strong>Clique ou arraste</strong> o arquivo Excel aqui</p>
+            <p style="font-size:11px;color:var(--text-3);margin-top:4px">.xlsx ou .xls · Primeira linha = cabeçalho</p>
+          </div>
+
+          <div class="hidden mt-16" id="excel-column-selector">
+            <div class="col-sel-row">
+              <div>
+                <label class="field-label">Coluna do Telefone</label>
+                <select id="col-phone"></select>
+              </div>
+              <div>
+                <label class="field-label">Coluna do Nome</label>
+                <select id="col-name"></select>
+              </div>
+            </div>
+            <div class="preview-wrap hidden" id="excel-preview-wrapper">
+              <table class="preview-table" id="excel-preview-table"></table>
+            </div>
+            <div class="row-end">
+              <button class="btn-ghost btn-sm" id="btn-cancel-excel">Cancelar</button>
+              <button class="btn-primary btn-sm" id="btn-import-excel">✓ Importar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela de contatos -->
+      <div class="contact-table-wrap mt-16">
+        <div class="empty-state" id="contacts-empty">
+          <div class="ei">👥</div>Nenhum contato adicionado.
+        </div>
+        <table class="hidden" id="contact-table">
+          <thead><tr><th>#</th><th>Nome</th><th>Telefone</th><th style="width:40px;text-align:center">–</th></tr></thead>
+          <tbody id="contact-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="inline-err hidden mt-12" id="step2-error">Adicione pelo menos um contato para continuar.</div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn-ghost" id="btn-prev-2">← Anterior</button>
+      <button class="btn-primary btn-lg" id="btn-next-2">Próximo →</button>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 3: MENSAGEM ══════════════════════════════════ -->
+  <div class="step-panel" data-panel="3">
+    <div class="card">
+      <div class="card-title">Qual é a mensagem?</div>
+      <div class="card-sub">Escreva o texto do disparo. Use <code style="background:var(--card2);padding:1px 5px;border-radius:4px">{nome}</code> para personalizar com o nome de cada contato.</div>
+
+      <div class="field">
+        <div class="placeholder-hint">💡 <span class="chip">{nome}</span> será substituído pelo nome do contato</div>
+        <textarea id="main-message" placeholder="Olá {nome}, temos uma oferta especial para você! 🎉"></textarea>
+        <div class="char-count" id="main-char-count">0 caracteres</div>
+      </div>
+
+      <div class="row-end">
+        <button class="btn-ghost btn-sm" id="btn-preview">👁 Pré-visualizar</button>
+      </div>
+
+      <div class="hidden" id="preview-container">
+        <div class="preview-label mt-12">Pré-visualização</div>
+        <div class="preview-box" id="preview-box"></div>
+      </div>
+
+      <!-- Variações A/B -->
+      <label class="toggle-row" for="toggle-variations">
+        <div class="toggle-sw">
+          <input type="checkbox" id="toggle-variations" />
+          <span class="toggle-sl"></span>
+        </div>
+        <div class="toggle-lbl">
+          Variações de mensagem (Teste A/B)
+          <small>O sistema escolherá aleatoriamente entre as variações durante o disparo</small>
+        </div>
+      </label>
+
+      <div class="hidden" id="variations-panel">
+        <div id="variations-list" style="margin-top:12px"></div>
+        <button class="btn-secondary btn-sm" id="btn-add-variation">+ Adicionar Variação</button>
+      </div>
+
+      <!-- Mídia opcional -->
+      <div class="media-section">
+        <label class="toggle-row" for="toggle-media" style="border-top:none;padding-top:0;margin-top:0">
+          <div class="toggle-sw">
+            <input type="checkbox" id="toggle-media" />
+            <span class="toggle-sl"></span>
+          </div>
+          <div class="toggle-lbl">
+            Enviar mídia junto com a mensagem
+            <small>Imagem, vídeo, áudio ou documento por URL</small>
+          </div>
+        </label>
+
+        <div class="hidden" id="media-panel">
+          <div class="media-type-grid">
+            <button class="media-type-btn active" data-mtype="image"><span class="mti">🖼️</span>Imagem</button>
+            <button class="media-type-btn" data-mtype="video"><span class="mti">🎬</span>Vídeo</button>
+            <button class="media-type-btn" data-mtype="audio"><span class="mti">🎵</span>Áudio</button>
+            <button class="media-type-btn" data-mtype="document"><span class="mti">📄</span>Documento</button>
+          </div>
+          <div class="field">
+            <label class="field-label">URL da mídia</label>
+            <input type="text" id="media-url" placeholder="https://exemplo.com/imagem.jpg" />
+          </div>
+          <div class="field" id="media-caption-field">
+            <label class="field-label">Legenda (opcional)</label>
+            <input type="text" id="media-caption" placeholder="Descrição da mídia..." />
+          </div>
+          <div class="field hidden" id="media-filename-field">
+            <label class="field-label">Nome do arquivo</label>
+            <input type="text" id="media-filename" placeholder="documento.pdf" />
+          </div>
+        </div>
+      </div>
+
+      <div class="inline-err hidden mt-12" id="step3-error">A mensagem não pode estar vazia.</div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn-ghost" id="btn-prev-3">← Anterior</button>
+      <button class="btn-primary btn-lg" id="btn-next-3">Próximo →</button>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 4: DELAY ═════════════════════════════════════ -->
+  <div class="step-panel" data-panel="4">
+    <div class="card">
+      <div class="card-title">Qual o intervalo entre os envios?</div>
+      <div class="card-sub">O sistema aguardará um tempo aleatório entre cada mensagem enviada, respeitando os limites definidos abaixo.</div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label class="field-label">Tempo mínimo (segundos)</label>
+          <input type="number" id="delay-min" value="5" min="1" max="3600" />
+        </div>
+        <div class="field">
+          <label class="field-label">Tempo máximo (segundos)</label>
+          <input type="number" id="delay-max" value="15" min="1" max="3600" />
+        </div>
+      </div>
+
+      <div class="delay-visual" id="delay-visual">
+        ⏱ Aguardará entre <span class="dhl" id="dv-min">5s</span> e <span class="dhl" id="dv-max">15s</span> entre cada envio
+      </div>
+
+      <div class="banner warning hidden mt-12" id="delay-warn">
+        <span>⚠</span>
+        <span>Intervalos muito curtos aumentam o risco de banimento do número pelo WhatsApp. Recomendamos mínimo de 5 segundos.</span>
+      </div>
+
+      <div class="inline-err hidden mt-12" id="step4-error"></div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn-ghost" id="btn-prev-4">← Anterior</button>
+      <button class="btn-primary btn-lg" id="btn-next-4">Revisar e Disparar →</button>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 5: DISPARAR ══════════════════════════════════ -->
+  <div class="step-panel" data-panel="5">
+    <div class="card">
+      <div class="card-title" id="dispatch-title">Pronto para disparar!</div>
+      <div class="card-sub" id="dispatch-sub">Revise o resumo abaixo e clique em Iniciar quando estiver pronto.</div>
+
+      <!-- Resumo pré-disparo -->
+      <div id="dispatch-summary-pre" style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:18px;margin-bottom:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;font-size:13px">
+          <div><span style="color:var(--text-2)">Instância</span><br><strong id="pre-instance">—</strong></div>
+          <div><span style="color:var(--text-2)">Contatos</span><br><strong id="pre-contacts" style="color:var(--accent)">—</strong></div>
+          <div><span style="color:var(--text-2)">Delay</span><br><strong id="pre-delay">—</strong></div>
+          <div><span style="color:var(--text-2)">Mídia</span><br><strong id="pre-media">—</strong></div>
+        </div>
+      </div>
+
+      <div id="dispatch-validation-error" class="inline-err hidden" style="margin-bottom:14px"></div>
+
+      <!-- Controles -->
+      <div style="display:flex;gap:10px;margin-bottom:20px">
+        <button class="btn-primary btn-lg dispatch-big-btn" id="btn-start" style="margin-bottom:0">▶ Iniciar Disparo</button>
+        <button class="btn-danger hidden" id="btn-stop" style="min-width:130px;justify-content:center;padding:13px 20px;font-size:15px;font-weight:700">⏹ Parar</button>
+      </div>
+
+      <!-- Progresso -->
+      <div class="progress-wrap hidden" id="progress-wrapper">
+        <div class="progress-header">
+          <span style="color:var(--text-2)" id="progress-label">0 / 0</span>
+          <span class="progress-pct" id="progress-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-panel hidden" id="dispatch-log"></div>
+
+      <!-- Resumo pós-disparo -->
+      <div class="hidden" id="post-summary">
+        <div style="height:1px;background:var(--border);margin:20px 0"></div>
+        <div class="summary-grid">
+          <div class="sum-item sent"><div class="sum-val" id="sum-sent">—</div><div class="sum-lbl">Enviados</div></div>
+          <div class="sum-item errors"><div class="sum-val" id="sum-errors">—</div><div class="sum-lbl">Erros</div></div>
+          <div class="sum-item time"><div class="sum-val" id="sum-elapsed">—</div><div class="sum-lbl">Tempo Total</div></div>
+          <div class="sum-item avg"><div class="sum-val" id="sum-avg">—</div><div class="sum-lbl">Delay Médio</div></div>
+        </div>
+        <div class="sum-interrupted hidden" id="sum-interrupted" style="margin-top:12px">⚠ Disparo interrompido pelo usuário.</div>
+
+        <div class="new-dispatch-box">
+          <p>Disparo finalizado! Deseja enviar para uma nova lista de contatos?</p>
+          <button class="btn-primary btn-lg" id="btn-new-dispatch">🚀 Iniciar Novo Disparo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-nav" id="dispatch-nav">
+      <button class="btn-ghost" id="btn-prev-5">← Voltar</button>
+      <div></div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- ═══ MODAL QR / PAIR CODE ════════════════════════════════ -->
+<div class="modal-overlay hidden" id="modal-connect">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Conectar via QR Code</div>
+    <div class="modal-sub" id="modal-sub">Abra o WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie o QR</div>
+
+    <!-- QR Code -->
+    <div id="modal-qr-section">
+      <div class="qr-img-wrap">
+        <img id="qr-img" src="" alt="QR Code" />
+      </div>
+      <div class="qr-timer">QR expira em <span id="qr-countdown">60</span>s · <button class="btn-ghost btn-sm" id="btn-refresh-qr" style="padding:4px 10px;font-size:11px">↺ Atualizar</button></div>
+    </div>
+
+    <!-- Pair Code -->
+    <div id="modal-pair-section" class="hidden">
+      <div class="pair-code-display" id="pair-code-display">········</div>
+      <div class="modal-sub">Digite este código no WhatsApp → Aparelhos conectados → Vincular com número de telefone</div>
+    </div>
+
+    <div class="row-end" style="justify-content:center;gap:10px;margin-top:8px">
+      <button class="btn-ghost" id="btn-modal-close">Fechar</button>
+      <button class="btn-primary btn-sm" id="btn-modal-check-status">✓ Já conectei</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const AppState = {
+  currentStep: 1,
+  contacts: [],
+  variations: [],
+  stopRequested: false,
+  excelRows: null,
+  userScrolledLog: false,
+  logCount: 0,
+  mediaType: 'image',
+  qrTimer: null,
+  qrCountdown: 60,
+};
+
+// ============================================================
+// CONFIG
+// ============================================================
+const Config = {
+  init() {
+    if (window.location.protocol === 'file:') {
+      UI.addBanner('warning', '⚠ Abra via servidor: rode <code>node server.js</code> e acesse <code>http://localhost:3000</code>.');
+    }
+  }
+};
+
+// ============================================================
+// API
+// ============================================================
+const API = {
+  async getAllInstances() {
+    const res = await fetch('/api/instances');
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.error || `HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    return Array.isArray(body.data) ? body.data : [];
+  },
+
+  async connectInstance(instanceToken, webhookUrl) {
+    const res = await fetch('/api/instance/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instanceToken, webhookUrl, subscribe: ['MESSAGE', 'GROUP', 'CALL'] })
+    });
+    return res.json();
+  },
+
+  async getQR(instanceToken) {
+    const res = await fetch('/api/instance/qr', {
+      headers: { 'x-instance-token': instanceToken }
+    });
+    return res.json();
+  },
+
+  async pairCode(instanceToken, phone) {
+    const res = await fetch('/api/instance/pair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instanceToken, phone })
+    });
+    return res.json();
+  },
+
+  async getStatus(instanceToken) {
+    const res = await fetch('/api/instance/status', {
+      headers: { 'x-instance-token': instanceToken }
+    });
+    return res.json();
+  },
+
+  async sendText(instanceToken, number, text) {
+    try {
+      const res = await fetch('/api/send/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceToken, number, text })
+      });
+      if (res.ok) return { ok: true };
+      let msg = `HTTP ${res.status}`;
+      try { const b = await res.json(); msg = b.error || b.message || msg; } catch (_) {}
+      return { ok: false, errorMessage: msg };
+    } catch (err) {
+      return { ok: false, errorMessage: err.message };
+    }
+  },
+
+  async sendMedia(instanceToken, number, url, type, caption, filename) {
+    try {
+      const res = await fetch('/api/send/media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceToken, number, url, type, caption, filename })
+      });
+      if (res.ok) return { ok: true };
+      let msg = `HTTP ${res.status}`;
+      try { const b = await res.json(); msg = b.error || b.message || msg; } catch (_) {}
+      return { ok: false, errorMessage: msg };
+    } catch (err) {
+      return { ok: false, errorMessage: err.message };
+    }
+  }
+};
+
+// ============================================================
+// STEPPER
+// ============================================================
+const Stepper = {
+  goTo(step) {
+    AppState.currentStep = step;
+    document.querySelectorAll('.step-panel').forEach(p => {
+      p.classList.toggle('active', parseInt(p.dataset.panel) === step);
+    });
+    document.querySelectorAll('.step-item').forEach(item => {
+      const n = parseInt(item.dataset.step);
+      item.classList.remove('active', 'done');
+      if (n < step) item.classList.add('done');
+      else if (n === step) item.classList.add('active');
+    });
+    for (let i = 1; i <= 4; i++) {
+      const fill = document.getElementById(`line-${i}`);
+      if (fill) fill.style.width = i < step ? '100%' : '0%';
+    }
+    if (step === 5) Stepper.fillPreSummary();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
+  fillPreSummary() {
+    const sel = document.getElementById('instance-select');
+    const instName = sel.options[sel.selectedIndex]?.text || '—';
+    document.getElementById('pre-instance').textContent = instName;
+    document.getElementById('pre-contacts').textContent = `${AppState.contacts.length} contatos`;
+    const minV = document.getElementById('delay-min').value;
+    const maxV = document.getElementById('delay-max').value;
+    document.getElementById('pre-delay').textContent = `${minV}s – ${maxV}s`;
+    const mediaOn = document.getElementById('toggle-media').checked;
+    const mediaUrl = document.getElementById('media-url').value.trim();
+    document.getElementById('pre-media').textContent = (mediaOn && mediaUrl) ? AppState.mediaType : 'Nenhuma';
+  }
+};
+
+// ============================================================
+// INSTANCES
+// ============================================================
+const Instances = {
+  async load() {
+    const btn = document.getElementById('btn-load-instances');
+    btn.disabled = true; btn.textContent = '↺ Carregando...';
+    try {
+      const instances = await API.getAllInstances();
+      const sel = document.getElementById('instance-select');
+      sel.innerHTML = instances.length
+        ? '<option value="">— Selecione —</option>'
+        : '<option value="">Nenhuma instância encontrada</option>';
+      instances.forEach(inst => {
+        const opt = document.createElement('option');
+        opt.value = inst.name || inst.id;
+        opt.dataset.connected = inst.connected ? '1' : '0';
+        opt.textContent = inst.name || inst.id;
+        sel.appendChild(opt);
+      });
+      if (instances.length === 1) {
+        sel.value = instances[0].name || instances[0].id;
+        this.onSelect(sel.value, instances[0].connected);
+      }
+    } catch (err) {
+      UI.addBanner('error', `Erro ao carregar instâncias: ${err.message}`);
+    } finally {
+      btn.disabled = false; btn.textContent = '↺ Carregar';
+    }
+  },
+
+  onSelect(name, connected) {
+    const dot = document.getElementById('instance-dot');
+    const lbl = document.getElementById('instance-status-label');
+    if (!name) { dot.className = 'status-dot'; lbl.textContent = '—'; return; }
+    if (connected !== undefined) {
+      dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
+      lbl.textContent = connected ? 'Conectado' : 'Desconectado';
+    }
+    const saved = localStorage.getItem(`token:${name}`);
+    document.getElementById('instance-token').value = saved || '';
+  },
+
+  saveToken() {
+    const name = document.getElementById('instance-select').value;
+    const token = document.getElementById('instance-token').value.trim();
+    if (!name || !token) return;
+    localStorage.setItem(`token:${name}`, token);
+    UI.flashBtn(document.getElementById('btn-save-token'), '✓');
+  },
+
+  getToken() {
+    return document.getElementById('instance-token').value.trim();
+  },
+
+  async checkStatus() {
+    const token = this.getToken();
+    if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
+    const dot = document.getElementById('instance-dot');
+    const lbl = document.getElementById('instance-status-label');
+    dot.className = 'status-dot loading'; lbl.textContent = 'Verificando...';
+    try {
+      const data = await API.getStatus(token);
+      const connected = data?.data?.connected || data?.data?.loggedIn;
+      dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
+      lbl.textContent = connected ? 'Conectado' : 'Desconectado';
+      if (connected) {
+        const jid = data?.data?.myJid || '';
+        UI.addBanner('info', `✓ Instância conectada${jid ? ' — ' + jid : ''}.`);
+      } else {
+        UI.addBanner('warning', '⚠ Instância não está conectada. Use os botões abaixo para conectar.');
+      }
+    } catch (err) {
+      dot.className = 'status-dot disconnected'; lbl.textContent = 'Erro';
+      UI.addBanner('error', `Erro ao verificar status: ${err.message}`);
+    }
+  },
+
+  async showQR() {
+    const token = this.getToken();
+    if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
+
+    // Inicia conexão antes de pegar o QR
+    await API.connectInstance(token, '');
+
+    const data = await API.getQR(token);
+    const code = data?.data?.code;
+    if (!code) {
+      UI.addBanner('error', 'Não foi possível gerar o QR Code. Verifique se o token é válido e tente novamente.');
+      return;
+    }
+
+    document.getElementById('qr-img').src = code;
+    document.getElementById('modal-qr-section').classList.remove('hidden');
+    document.getElementById('modal-pair-section').classList.add('hidden');
+    document.getElementById('modal-title').textContent = 'Conectar via QR Code';
+    document.getElementById('modal-sub').textContent = 'Abra o WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie o QR';
+    document.getElementById('modal-connect').classList.remove('hidden');
+
+    // Countdown timer
+    clearInterval(AppState.qrTimer);
+    AppState.qrCountdown = 60;
+    document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
+    AppState.qrTimer = setInterval(() => {
+      AppState.qrCountdown--;
+      document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
+      if (AppState.qrCountdown <= 0) {
+        clearInterval(AppState.qrTimer);
+        document.getElementById('qr-countdown').textContent = 'expirado';
+      }
+    }, 1000);
+  },
+
+  async refreshQR() {
+    const token = this.getToken();
+    if (!token) return;
+    const data = await API.getQR(token);
+    const code = data?.data?.code;
+    if (code) {
+      document.getElementById('qr-img').src = code;
+      clearInterval(AppState.qrTimer);
+      AppState.qrCountdown = 60;
+      document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
+      AppState.qrTimer = setInterval(() => {
+        AppState.qrCountdown--;
+        document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
+        if (AppState.qrCountdown <= 0) clearInterval(AppState.qrTimer);
+      }, 1000);
+    }
+  },
+
+  async requestPairCode() {
+    const token = this.getToken();
+    const phone = document.getElementById('pair-phone').value.replace(/\D/g,'');
+    if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
+    if (phone.length < 10) { UI.addBanner('warning', 'Informe um número de telefone válido com DDI.'); return; }
+
+    const data = await API.pairCode(token, phone);
+    const code = data?.data?.code;
+    if (!code) {
+      UI.addBanner('error', 'Não foi possível gerar o código de pareamento. Verifique o token e tente novamente.');
+      return;
+    }
+
+    document.getElementById('pair-code-display').textContent = code;
+    document.getElementById('modal-qr-section').classList.add('hidden');
+    document.getElementById('modal-pair-section').classList.remove('hidden');
+    document.getElementById('modal-title').textContent = 'Conectar via Código';
+    document.getElementById('modal-sub').textContent = '';
+    document.getElementById('modal-connect').classList.remove('hidden');
+  }
+};
+
+// ============================================================
+// CONTACTS
+// ============================================================
+const Contacts = {
+  sanitize(raw) { return String(raw).replace(/\D/g, ''); },
+
+  add(name, phone) {
+    const p = this.sanitize(phone);
+    const errEl = document.getElementById('manual-error');
+    if (p.length < 10) {
+      errEl.textContent = 'Telefone inválido. Use DDI + DDD + número (ex: 5511999999999).';
+      errEl.classList.remove('hidden'); return false;
+    }
+    errEl.classList.add('hidden');
+    AppState.contacts.push({ name: name.trim() || p, phone: p });
+    UI.renderContacts(); return true;
+  },
+
+  remove(i) { AppState.contacts.splice(i, 1); UI.renderContacts(); },
+  clear() { AppState.contacts = []; UI.renderContacts(); },
+
+  importFromRows(rows, pCol, nCol) {
+    let imported = 0, skipped = 0;
+    rows.slice(1).forEach(row => {
+      const phone = this.sanitize(String(row[pCol] ?? ''));
+      const name = String(row[nCol] ?? '').trim();
+      if (phone.length < 10) { skipped++; return; }
+      AppState.contacts.push({ name: name || phone, phone });
+      imported++;
+    });
+    UI.renderContacts();
+    return { imported, skipped };
+  }
+};
+
+// ============================================================
+// EXCEL
+// ============================================================
+const Excel = {
+  onFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+        AppState.excelRows = rows;
+        this.populateCols(rows);
+        this.renderPreview(rows);
+        document.getElementById('excel-column-selector').classList.remove('hidden');
+      } catch (err) {
+        UI.addBanner('error', `Erro ao ler Excel: ${err.message}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  },
+
+  populateCols(rows) {
+    if (!rows.length) return;
+    const headers = rows[0];
+    ['col-phone', 'col-name'].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '';
+      headers.forEach((h, i) => sel.appendChild(new Option(String(h).trim() || `Col ${String.fromCharCode(65+i)}`, i)));
+    });
+    const pi = headers.findIndex(h => /tel|fone|phone|whats|celular|n[uú]mero/i.test(String(h)));
+    const ni = headers.findIndex(h => /nome|name|cliente|pessoa/i.test(String(h)));
+    if (pi >= 0) document.getElementById('col-phone').value = pi;
+    if (ni >= 0 && ni !== pi) document.getElementById('col-name').value = ni;
+  },
+
+  renderPreview(rows) {
+    const tbl = document.getElementById('excel-preview-table');
+    tbl.innerHTML = '<tbody>' + rows.slice(0,6).map((r,i) =>
+      `<tr${i===0?' class="hr"':''}>${r.slice(0,6).map(c=>`<td>${String(c??'').slice(0,50)}</td>`).join('')}</tr>`
+    ).join('') + '</tbody>';
+    document.getElementById('excel-preview-wrapper').classList.remove('hidden');
+  },
+
+  import() {
+    if (!AppState.excelRows || AppState.excelRows.length < 2) return;
+    const pCol = parseInt(document.getElementById('col-phone').value);
+    const nCol = parseInt(document.getElementById('col-name').value);
+    const { imported, skipped } = Contacts.importFromRows(AppState.excelRows, pCol, nCol);
+    document.getElementById('excel-column-selector').classList.add('hidden');
+    document.getElementById('excel-file').value = '';
+    AppState.excelRows = null;
+    Log.appendSystem(`${imported} contato(s) importado(s)${skipped ? ` · ${skipped} ignorado(s)` : ''}.`);
+  },
+
+  cancel() {
+    document.getElementById('excel-column-selector').classList.add('hidden');
+    document.getElementById('excel-file').value = '';
+    AppState.excelRows = null;
+  }
+};
+
+// ============================================================
+// MESSAGE
+// ============================================================
+const Message = {
+  getActive() {
+    if (document.getElementById('toggle-variations').checked && AppState.variations.length) {
+      const active = AppState.variations.filter(v => v.trim());
+      if (active.length) return active;
+    }
+    const main = document.getElementById('main-message').value.trim();
+    return main ? [main] : [];
+  },
+
+  pickRandom() {
+    const msgs = this.getActive();
+    return msgs.length ? msgs[Math.floor(Math.random() * msgs.length)] : '';
+  },
+
+  interpolate(tpl, contact) {
+    return tpl.replace(/\{nome\}/gi, contact.name || '');
+  },
+
+  preview() {
+    const msgs = this.getActive();
+    if (!msgs.length) { document.getElementById('preview-container').classList.add('hidden'); return; }
+    const c = AppState.contacts[0] || { name: 'Contato Exemplo' };
+    document.getElementById('preview-box').textContent = this.interpolate(msgs[0], c);
+    document.getElementById('preview-container').classList.remove('hidden');
+  },
+
+  addVariation() {
+    AppState.variations.push('');
+    this.renderVariations();
+  },
+
+  removeVariation(i) {
+    AppState.variations.splice(i, 1);
+    this.renderVariations();
+  },
+
+  renderVariations() {
+    const list = document.getElementById('variations-list');
+    list.innerHTML = '';
+    AppState.variations.forEach((v, i) => {
+      const d = document.createElement('div');
+      d.className = 'var-item';
+      d.innerHTML = `<span class="var-num">V${i+1}</span><textarea placeholder="Variação ${i+1} — Use {nome}">${esc(v)}</textarea><button class="btn-icon" title="Remover">✕</button>`;
+      d.querySelector('textarea').addEventListener('input', e => { AppState.variations[i] = e.target.value; });
+      d.querySelector('button').addEventListener('click', () => this.removeVariation(i));
+      list.appendChild(d);
+    });
+  },
+
+  onToggle(checked) {
+    document.getElementById('variations-panel').classList.toggle('hidden', !checked);
+    if (checked && !AppState.variations.length) {
+      AppState.variations.push(document.getElementById('main-message').value);
+      this.renderVariations();
+    }
+  }
+};
+
+// ============================================================
+// DELAY
+// ============================================================
+const Delay = {
+  sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
+  getRandom(minMs, maxMs) { return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs; },
+
+  updateVisual() {
+    const min = parseInt(document.getElementById('delay-min').value) || 0;
+    const max = parseInt(document.getElementById('delay-max').value) || 0;
+    document.getElementById('dv-min').textContent = `${min}s`;
+    document.getElementById('dv-max').textContent = `${max}s`;
+    document.getElementById('delay-warn').classList.toggle('hidden', min >= 5);
+  },
+
+  getValues() {
+    let min = parseInt(document.getElementById('delay-min').value) || 1;
+    let max = parseInt(document.getElementById('delay-max').value) || 1;
+    if (max < min) { document.getElementById('delay-max').value = min; max = min; }
+    return { minMs: min * 1000, maxMs: max * 1000 };
+  }
+};
+
+// ============================================================
+// LOG
+// ============================================================
+const Log = {
+  MAX: 500,
+
+  clear() {
+    AppState.logCount = 0;
+    AppState.userScrolledLog = false;
+    const el = document.getElementById('dispatch-log');
+    el.innerHTML = '';
+    el.classList.remove('hidden');
+  },
+
+  append(contact, status, errMsg) {
+    if (AppState.logCount >= this.MAX) return;
+    AppState.logCount++;
+    const el = document.getElementById('dispatch-log');
+    const time = new Date().toTimeString().slice(0,8);
+    const div = document.createElement('div');
+    div.className = `log-entry ${status}`;
+    div.innerHTML = `
+      <span class="log-time">${time}</span>
+      <span class="log-icon"></span>
+      <span class="log-name">${esc(contact.name)}</span>
+      <span class="log-phone">${contact.phone}</span>
+      ${status === 'error' ? `<span class="log-errmsg">— ${esc(errMsg||'Erro')}</span>` : ''}
+    `;
+    el.appendChild(div);
+    if (!AppState.userScrolledLog) el.scrollTop = el.scrollHeight;
+  },
+
+  appendSystem(msg) {
+    const el = document.getElementById('dispatch-log');
+    el.classList.remove('hidden');
+    const div = document.createElement('div');
+    div.className = 'log-entry system';
+    div.innerHTML = `<span class="log-icon"></span><span class="log-sysmsg">${esc(msg)}</span>`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+};
+
+// ============================================================
+// DISPATCH
+// ============================================================
+const Dispatch = {
+  async start() {
+    const errEl = document.getElementById('dispatch-validation-error');
+    errEl.classList.add('hidden');
+    const token = Instances.getToken();
+    if (!token) { errEl.textContent = 'Token da instância não informado.'; errEl.classList.remove('hidden'); return; }
+    if (!AppState.contacts.length) { errEl.textContent = 'Nenhum contato.'; errEl.classList.remove('hidden'); return; }
+    if (!Message.getActive().length) { errEl.textContent = 'Mensagem vazia.'; errEl.classList.remove('hidden'); return; }
+
+    const { minMs, maxMs } = Delay.getValues();
+    AppState.stopRequested = false;
+    await this._loop(AppState.contacts.slice(), token, minMs, maxMs);
+  },
+
+  stop() {
+    AppState.stopRequested = true;
+    const btn = document.getElementById('btn-stop');
+    btn.textContent = '⏹ Parando...';
+    btn.disabled = true;
+  },
+
+  async _loop(contacts, token, minMs, maxMs) {
+    const t0 = Date.now();
+    let sent = 0, errors = 0, totalDelay = 0, delayCount = 0;
+    const total = contacts.length;
+    let interrupted = false;
+
+    const mediaOn = document.getElementById('toggle-media').checked;
+    const mediaUrl = document.getElementById('media-url').value.trim();
+    const mediaCaption = document.getElementById('media-caption').value.trim();
+    const mediaFilename = document.getElementById('media-filename').value.trim();
+    const mediaType = AppState.mediaType;
+
+    document.getElementById('btn-start').classList.add('hidden');
+    document.getElementById('btn-stop').classList.remove('hidden');
+    document.getElementById('btn-prev-5').disabled = true;
+    document.getElementById('progress-wrapper').classList.remove('hidden');
+    document.getElementById('dispatch-title').textContent = 'Disparo em andamento...';
+    document.getElementById('dispatch-sub').textContent = `Enviando para ${total} contato(s). Não feche esta janela.`;
+    Log.clear();
+    document.getElementById('post-summary').classList.add('hidden');
+
+    for (let i = 0; i < total; i++) {
+      if (AppState.stopRequested) { interrupted = true; Log.appendSystem('Disparo interrompido pelo usuário.'); break; }
+
+      const contact = contacts[i];
+      const text = Message.interpolate(Message.pickRandom(), contact);
+      let result;
+
+      if (mediaOn && mediaUrl) {
+        result = await API.sendMedia(token, contact.phone, mediaUrl, mediaType, mediaCaption, mediaFilename);
+        // Se a mídia falhar mas o texto tiver conteúdo, ainda tenta enviar o texto
+        if (!result.ok && text) {
+          result = await API.sendText(token, contact.phone, text);
+        }
+      } else {
+        result = await API.sendText(token, contact.phone, text);
+      }
+
+      result.ok ? (sent++, Log.append(contact, 'success')) : (errors++, Log.append(contact, 'error', result.errorMessage));
+      UI.updateProgress(i + 1, total);
+
+      if (i < total - 1 && !AppState.stopRequested) {
+        const d = Delay.getRandom(minMs, maxMs);
+        totalDelay += d; delayCount++;
+        await Delay.sleep(d);
+      }
+    }
+
+    const elapsed = Date.now() - t0;
+    const elapsedStr = elapsed < 60000 ? `${Math.round(elapsed/1000)}s` : `${Math.floor(elapsed/60000)}m${Math.round((elapsed%60000)/1000)}s`;
+    const avgDelay = delayCount ? `${(totalDelay/delayCount/1000).toFixed(1)}s` : '—';
+
+    document.getElementById('sum-sent').textContent = sent;
+    document.getElementById('sum-errors').textContent = errors;
+    document.getElementById('sum-elapsed').textContent = elapsedStr;
+    document.getElementById('sum-avg').textContent = avgDelay;
+    document.getElementById('sum-interrupted').classList.toggle('hidden', !interrupted);
+    document.getElementById('post-summary').classList.remove('hidden');
+
+    document.getElementById('btn-start').classList.remove('hidden');
+    document.getElementById('btn-stop').classList.add('hidden');
+    document.getElementById('btn-stop').disabled = false;
+    document.getElementById('btn-stop').textContent = '⏹ Parar';
+    document.getElementById('btn-prev-5').disabled = false;
+    document.getElementById('dispatch-title').textContent = interrupted ? 'Disparo interrompido' : 'Disparo concluído! ✓';
+    document.getElementById('dispatch-sub').textContent = `${sent} mensagem(ns) enviada(s) com sucesso.`;
+    AppState.stopRequested = false;
+  }
+};
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+const UI = {
+  addBanner(type, html) {
+    const c = document.getElementById('banner-container');
+    const b = document.createElement('div');
+    b.className = `banner ${type}`;
+    b.innerHTML = `<span>${type==='error'?'🚨':type==='info'?'ℹ️':'⚠'}</span><span>${html}</span>`;
+    c.appendChild(b);
+    setTimeout(() => b.remove(), 8000);
+  },
+
+  renderContacts() {
+    const contacts = AppState.contacts;
+    const tbody = document.getElementById('contact-tbody');
+    const table = document.getElementById('contact-table');
+    const empty = document.getElementById('contacts-empty');
+    const badge = document.getElementById('contact-count-badge');
+
+    badge.textContent = contacts.length;
+    badge.className = 'badge' + (contacts.length === 0 ? ' zero' : '');
+
+    if (!contacts.length) { table.classList.add('hidden'); empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden'); table.classList.remove('hidden');
+    tbody.innerHTML = '';
+    contacts.forEach((c, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td style="color:var(--text-3);font-size:11px">${i+1}</td><td>${esc(c.name)}</td><td style="font-family:monospace;font-size:12px">${c.phone}</td><td style="text-align:center"><button class="btn-icon">✕</button></td>`;
+      tr.querySelector('button').onclick = () => Contacts.remove(i);
+      tbody.appendChild(tr);
+    });
+  },
+
+  updateProgress(cur, total) {
+    const pct = total > 0 ? Math.round(cur/total*100) : 0;
+    document.getElementById('progress-fill').style.width = `${pct}%`;
+    document.getElementById('progress-label').textContent = `${cur} / ${total}`;
+    document.getElementById('progress-pct').textContent = `${pct}%`;
+  },
+
+  flashBtn(btn, text) {
+    const orig = btn.textContent;
+    btn.textContent = text;
+    setTimeout(() => btn.textContent = orig, 1500);
+  }
+};
+
+// ============================================================
+// VALIDATE
+// ============================================================
+const Validate = {
+  step1() {
+    const ok = document.getElementById('instance-select').value && Instances.getToken();
+    document.getElementById('step1-error').classList.toggle('hidden', !!ok);
+    return !!ok;
+  },
+  step2() {
+    const ok = AppState.contacts.length > 0;
+    document.getElementById('step2-error').classList.toggle('hidden', ok);
+    return ok;
+  },
+  step3() {
+    const ok = Message.getActive().length > 0;
+    document.getElementById('step3-error').classList.toggle('hidden', ok);
+    return ok;
+  },
+  step4() {
+    const min = parseInt(document.getElementById('delay-min').value) || 0;
+    const max = parseInt(document.getElementById('delay-max').value) || 0;
+    const errEl = document.getElementById('step4-error');
+    if (min < 1) { errEl.textContent = 'Tempo mínimo deve ser pelo menos 1 segundo.'; errEl.classList.remove('hidden'); return false; }
+    if (max < min) { errEl.textContent = 'Tempo máximo deve ser maior ou igual ao mínimo.'; errEl.classList.remove('hidden'); return false; }
+    errEl.classList.add('hidden'); return true;
+  }
+};
+
+// ============================================================
+// UTIL
+// ============================================================
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  Config.init();
+  UI.renderContacts();
+  Delay.updateVisual();
+
+  // Instance
+  document.getElementById('btn-load-instances').onclick = () => Instances.load();
+  document.getElementById('instance-select').addEventListener('change', e => {
+    const opt = e.target.options[e.target.selectedIndex];
+    Instances.onSelect(e.target.value, opt.dataset.connected === '1');
+  });
+  document.getElementById('btn-save-token').onclick = () => Instances.saveToken();
+  document.getElementById('btn-toggle-token-vis').onclick = () => {
+    const inp = document.getElementById('instance-token');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  };
+
+  // Connect buttons
+  document.getElementById('btn-show-qr').onclick = () => Instances.showQR();
+  document.getElementById('btn-show-pair').onclick = () => {
+    const s = document.getElementById('pair-input-section');
+    s.classList.toggle('hidden');
+  };
+  document.getElementById('btn-check-status').onclick = () => Instances.checkStatus();
+  document.getElementById('btn-request-pair').onclick = () => Instances.requestPairCode();
+
+  // Modal
+  document.getElementById('btn-modal-close').onclick = () => {
+    document.getElementById('modal-connect').classList.add('hidden');
+    clearInterval(AppState.qrTimer);
+  };
+  document.getElementById('btn-refresh-qr').onclick = () => Instances.refreshQR();
+  document.getElementById('btn-modal-check-status').onclick = async () => {
+    await Instances.checkStatus();
+    document.getElementById('modal-connect').classList.add('hidden');
+    clearInterval(AppState.qrTimer);
+  };
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${btn.dataset.tab}`));
+  });
+
+  // Contacts
+  document.getElementById('btn-add-contact').onclick = () => {
+    if (Contacts.add(document.getElementById('input-name').value, document.getElementById('input-phone').value)) {
+      document.getElementById('input-name').value = '';
+      document.getElementById('input-phone').value = '';
+      document.getElementById('input-name').focus();
+    }
+  };
+  document.getElementById('input-phone').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btn-add-contact').click(); });
+  document.getElementById('btn-clear-contacts').onclick = () => {
+    if (AppState.contacts.length && confirm(`Remover todos os ${AppState.contacts.length} contatos?`)) Contacts.clear();
+  };
+
+  // Excel
+  document.getElementById('excel-file').onchange = e => Excel.onFile(e);
+  document.getElementById('btn-import-excel').onclick = () => Excel.import();
+  document.getElementById('btn-cancel-excel').onclick = () => Excel.cancel();
+
+  // Message
+  document.getElementById('main-message').addEventListener('input', e => {
+    document.getElementById('main-char-count').textContent = `${e.target.value.length} caracteres`;
+  });
+  document.getElementById('btn-preview').onclick = () => Message.preview();
+  document.getElementById('toggle-variations').onchange = e => Message.onToggle(e.target.checked);
+  document.getElementById('btn-add-variation').onclick = () => Message.addVariation();
+
+  // Media toggle
+  document.getElementById('toggle-media').onchange = e => {
+    document.getElementById('media-panel').classList.toggle('hidden', !e.target.checked);
+  };
+  document.querySelectorAll('.media-type-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.media-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      AppState.mediaType = btn.dataset.mtype;
+      const isDoc = AppState.mediaType === 'document';
+      document.getElementById('media-filename-field').classList.toggle('hidden', !isDoc);
+      document.getElementById('media-caption-field').classList.toggle('hidden', isDoc);
+    };
+  });
+
+  // Delay
+  ['delay-min','delay-max'].forEach(id => document.getElementById(id).addEventListener('input', () => Delay.updateVisual()));
+
+  // Step navigation
+  document.getElementById('btn-next-1').onclick = () => { if (Validate.step1()) Stepper.goTo(2); };
+  document.getElementById('btn-prev-2').onclick = () => Stepper.goTo(1);
+  document.getElementById('btn-next-2').onclick = () => { if (Validate.step2()) Stepper.goTo(3); };
+  document.getElementById('btn-prev-3').onclick = () => Stepper.goTo(2);
+  document.getElementById('btn-next-3').onclick = () => { if (Validate.step3()) Stepper.goTo(4); };
+  document.getElementById('btn-prev-4').onclick = () => Stepper.goTo(3);
+  document.getElementById('btn-next-4').onclick = () => { if (Validate.step4()) Stepper.goTo(5); };
+  document.getElementById('btn-prev-5').onclick = () => Stepper.goTo(4);
+
+  // Dispatch
+  document.getElementById('btn-start').onclick = () => Dispatch.start();
+  document.getElementById('btn-stop').onclick = () => Dispatch.stop();
+
+  // New dispatch
+  document.getElementById('btn-new-dispatch').onclick = () => {
+    Contacts.clear();
+    document.getElementById('post-summary').classList.add('hidden');
+    document.getElementById('progress-wrapper').classList.add('hidden');
+    document.getElementById('dispatch-log').classList.add('hidden');
+    document.getElementById('dispatch-log').innerHTML = '';
+    document.getElementById('dispatch-title').textContent = 'Pronto para disparar!';
+    document.getElementById('dispatch-sub').textContent = 'Revise o resumo abaixo e clique em Iniciar quando estiver pronto.';
+    Stepper.goTo(2);
+  };
+
+  // Log scroll detection
+  document.getElementById('dispatch-log').addEventListener('scroll', e => {
+    const el = e.target;
+    AppState.userScrolledLog = el.scrollTop < el.scrollHeight - el.clientHeight - 30;
+  });
+
+  // Close modal on overlay click
+  document.getElementById('modal-connect').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-connect')) {
+      document.getElementById('modal-connect').classList.add('hidden');
+      clearInterval(AppState.qrTimer);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
