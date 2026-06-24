@@ -139,15 +139,25 @@ app.get('/', requireAuth, (req, res) => {
 
 app.use(express.static(path.join(__dirname), { index: false }));
 
+// ── Normaliza número: garante DDI (adiciona 55 se parecer BR sem DDI) ──
+function normalizeNumber(raw) {
+  const n = String(raw).replace(/\D/g, '');
+  // Números BR sem DDI: 10 ou 11 dígitos começando com DDD válido (11-99)
+  if (n.length >= 10 && n.length <= 11) {
+    const ddd = parseInt(n.slice(0, 2));
+    if (ddd >= 11 && ddd <= 99) return '55' + n;
+  }
+  return n;
+}
+
 // ── Traduz códigos de erro da Evolution Go ───────────────────
 function translateEvolutionError(status, body) {
   if (status === 463) return 'Número sem WhatsApp';
-  if (status === 400) return body.error || body.message || 'Requisição inválida';
   if (status === 401 || status === 403) return 'Token inválido ou sem permissão';
   if (status === 404) return 'Instância não encontrada';
   if (status === 408 || status === 504) return 'Timeout — instância pode estar desconectada';
-  if (status === 500) return 'Erro interno na Evolution Go';
-  return body.error || body.message || `Erro ${status}`;
+  // Para 400 e 500: retorna a mensagem real da Evolution Go para facilitar diagnóstico
+  return body.error || body.message || body.response?.message || `Erro ${status}`;
 }
 
 // ── API ──────────────────────────────────────────────────────
@@ -203,7 +213,8 @@ app.get('/api/instance/status', requireAuth, async (req, res) => {
 });
 
 app.post('/api/send/text', requireAuth, async (req, res) => {
-  const { instanceToken, number, text } = req.body;
+  const { instanceToken, text } = req.body;
+  const number = normalizeNumber(req.body.number || '');
   if (!instanceToken) return res.status(400).json({ error: 'instanceToken obrigatório.' });
   if (!number || !/^\d{10,15}$/.test(number)) return res.status(400).json({ error: 'Número inválido.' });
   if (!text || !text.trim()) return res.status(400).json({ error: 'Texto vazio.' });
@@ -220,7 +231,8 @@ app.post('/api/send/text', requireAuth, async (req, res) => {
 });
 
 app.post('/api/send/media', requireAuth, async (req, res) => {
-  const { instanceToken, number, url, type, caption, filename } = req.body;
+  const { instanceToken, url, type, caption, filename } = req.body;
+  const number = normalizeNumber(req.body.number || '');
   if (!instanceToken || !number || !url || !type) return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   try {
     const up = await proxyFetch(`${EVOLUTION_URL}/send/media`, {
