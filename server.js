@@ -139,6 +139,17 @@ app.get('/', requireAuth, (req, res) => {
 
 app.use(express.static(path.join(__dirname), { index: false }));
 
+// ── Traduz códigos de erro da Evolution Go ───────────────────
+function translateEvolutionError(status, body) {
+  if (status === 463) return 'Número sem WhatsApp';
+  if (status === 400) return body.error || body.message || 'Requisição inválida';
+  if (status === 401 || status === 403) return 'Token inválido ou sem permissão';
+  if (status === 404) return 'Instância não encontrada';
+  if (status === 408 || status === 504) return 'Timeout — instância pode estar desconectada';
+  if (status === 500) return 'Erro interno na Evolution Go';
+  return body.error || body.message || `Erro ${status}`;
+}
+
 // ── API ──────────────────────────────────────────────────────
 
 app.get('/api/instances', requireAuth, async (req, res) => {
@@ -202,7 +213,9 @@ app.post('/api/send/text', requireAuth, async (req, res) => {
       method: 'POST', headers: { apikey: instanceToken },
       body: JSON.stringify({ number, text: text.trim(), delay: 0 }),
     });
-    res.status(up.status).json(await up.json());
+    const body = await up.json();
+    if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
+    res.status(up.status).json(body);
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
@@ -214,7 +227,9 @@ app.post('/api/send/media', requireAuth, async (req, res) => {
       method: 'POST', headers: { apikey: instanceToken },
       body: JSON.stringify({ number, url, type, caption, filename }),
     });
-    res.status(up.status).json(await up.json());
+    const body = await up.json();
+    if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
+    res.status(up.status).json(body);
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
