@@ -705,37 +705,18 @@
         <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
       </div>
 
-      <!-- Card de conexão -->
-      <div class="conn-card">
-        <div class="conn-status-row">
-          <div class="conn-badge disconnected" id="conn-badge">● Desconectado</div>
-          <span class="conn-phone-num hidden" id="conn-phone-num"></span>
-          <button class="btn-ghost btn-sm" id="btn-check-status" style="margin-left:auto">🔄 Verificar</button>
-        </div>
-
-        <!-- Ações quando desconectado -->
-        <div id="conn-disconnected-actions">
-          <div class="conn-btns">
-            <button class="btn-primary btn-sm" id="btn-show-qr">📷 Conectar via QR Code</button>
-            <button class="btn-ghost btn-sm" id="btn-show-pair">🔢 Conectar via Código</button>
-          </div>
-          <div class="hidden mt-12" id="pair-input-section">
-            <label class="field-label" style="margin-top:8px">Número de telefone (com DDI)</label>
-            <div style="display:flex;gap:8px">
-              <input type="text" id="pair-phone" placeholder="Ex: 5511999999999" style="flex:1" />
-              <button class="btn-primary btn-sm" id="btn-request-pair">Gerar Código</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Ações quando conectado -->
-        <div class="hidden" id="conn-connected-actions">
-          <div class="conn-btns">
-            <button class="btn-ghost btn-sm" id="btn-disconnect">🔌 Desconectar</button>
-            <button class="btn-ghost btn-sm" id="btn-restart-inst">🔄 Reconectar</button>
-          </div>
-        </div>
+      <!-- elementos ocultos para manter compatibilidade com JS existente -->
+      <div class="hidden" id="conn-disconnected-actions">
+        <div id="pair-input-section"><input type="text" id="pair-phone" /><button id="btn-request-pair"></button></div>
       </div>
+      <div class="hidden" id="conn-connected-actions"></div>
+      <span class="hidden" id="conn-badge"></span>
+      <span class="hidden" id="conn-phone-num"></span>
+      <button class="hidden" id="btn-show-qr"></button>
+      <button class="hidden" id="btn-show-pair"></button>
+      <button class="hidden" id="btn-check-status"></button>
+      <button class="hidden" id="btn-disconnect"></button>
+      <button class="hidden" id="btn-restart-inst"></button>
 
     </div>
 
