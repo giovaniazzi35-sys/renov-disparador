@@ -434,7 +434,7 @@
     .btn-add-media { display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);border:1.5px dashed var(--border);background:transparent;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;width:100%;justify-content:center;margin-top:4px; }
     .btn-add-media:hover { border-color:var(--accent);color:var(--accent); }
     /* ── Delay presets ── */
-    .delay-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px; }
+    .delay-presets { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px; }
     .delay-preset { border:1.5px solid var(--border); background:var(--bg); color:var(--text-2); border-radius:var(--radius-sm); padding:12px 4px; text-align:center; cursor:pointer; font-size:12px; font-weight:700; transition:all .15s; display:flex; flex-direction:column; align-items:center; gap:4px; }
     .delay-preset small { font-weight:400; font-size:10px; color:var(--text-3); display:block; }
     .delay-preset:hover { border-color:var(--accent); color:var(--text); }
@@ -873,10 +873,12 @@
 
       <!-- Presets -->
       <div class="delay-presets">
-        <button class="delay-preset" data-min="5" data-max="15">⚡ Rápido<small>5 – 15 seg</small></button>
-        <button class="delay-preset active" data-min="30" data-max="60">✅ Médio<small>30 seg – 1 min</small></button>
-        <button class="delay-preset" data-min="90" data-max="180">🐢 Lento<small>1,5 – 3 min</small></button>
-        <button class="delay-preset" data-min="180" data-max="300">🛡️ Cauteloso<small>3 – 5 min</small></button>
+        <button class="delay-preset" data-min="20" data-max="45">⚡ Normal<small>20 – 45 seg</small></button>
+        <button class="delay-preset" data-min="60" data-max="120">✅ Moderado<small>1 – 2 min</small></button>
+        <button class="delay-preset active" data-min="180" data-max="360">🐢 Lento<small>3 – 6 min</small></button>
+        <button class="delay-preset" data-min="420" data-max="600">🛡️ Cauteloso<small>7 – 10 min</small></button>
+        <button class="delay-preset" data-min="600" data-max="900">🔒 Seguro<small>10 – 15 min</small></button>
+        <button class="delay-preset" data-min="900" data-max="1800">🏰 Ultra Seguro<small>15 – 30 min</small></button>
       </div>
 
       <!-- Pickers min / max -->
@@ -884,17 +886,17 @@
         <div class="field">
           <label class="field-label">Tempo mínimo</label>
           <div class="time-picker">
-            <input type="number" id="dmin-m" value="0" min="0" max="59" />
+            <input type="number" id="dmin-m" value="3" min="0" max="59" />
             <span class="tp-label">min</span>
             <span class="tp-sep">:</span>
-            <input type="number" id="dmin-s" value="30" min="0" max="59" />
+            <input type="number" id="dmin-s" value="0" min="0" max="59" />
             <span class="tp-label">seg</span>
           </div>
         </div>
         <div class="field">
           <label class="field-label">Tempo máximo</label>
           <div class="time-picker">
-            <input type="number" id="dmax-m" value="1" min="0" max="59" />
+            <input type="number" id="dmax-m" value="6" min="0" max="59" />
             <span class="tp-label">min</span>
             <span class="tp-sep">:</span>
             <input type="number" id="dmax-s" value="0" min="0" max="59" />
@@ -914,8 +916,8 @@
       </div>
 
       <!-- hidden inputs para compatibilidade -->
-      <input type="hidden" id="delay-min" value="30" />
-      <input type="hidden" id="delay-max" value="60" />
+      <input type="hidden" id="delay-min" value="180" />
+      <input type="hidden" id="delay-max" value="360" />
 
       <div class="inline-err hidden mt-12" id="step4-error"></div>
     </div>
@@ -1534,7 +1536,7 @@ const Delay = {
     document.getElementById('dv-range').textContent = `${this._fmt(min)} – ${this._fmt(max)}`;
     const avg = (min + max) / 2 || 1;
     document.getElementById('dv-rate').textContent = Math.round(3600 / avg);
-    document.getElementById('delay-warn').classList.toggle('hidden', min >= 15);
+    document.getElementById('delay-warn').classList.toggle('hidden', min >= 60);
     // sync hidden inputs (usados por fillPreSummary)
     document.getElementById('delay-min').value = min;
     document.getElementById('delay-max').value = max;
