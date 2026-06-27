@@ -16,7 +16,6 @@ const PORT           = parseInt(process.env.PORT) || 3000;
 const EVOLUTION_URL  = (process.env.EVOLUTION_URL || '').replace(/\/$/, '');
 const GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'renov-secret-2026';
-const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
 
 if (!EVOLUTION_URL || EVOLUTION_URL === 'https://SEU_IP_OU_DOMINIO') {
   console.error('\n  ❌  EVOLUTION_URL não configurada! Edite o arquivo .env.\n');
@@ -353,32 +352,28 @@ function saveAgentConfig(cfg) {
 
 let agentConfig = loadAgentConfig();
 
-async function callClaude(userMessage) {
-  if (!CLAUDE_API_KEY) throw new Error('CLAUDE_API_KEY não configurada');
-  const system = [
-    agentConfig.prompt,
-    agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''
-  ].join('').trim();
-
+async function callOpenRouter(apiKey, model, systemPrompt, messages) {
   const body = JSON.stringify({
-    model: 'claude-haiku-4-5-20251001',
+    model: model || 'meta-llama/llama-3.2-3b-instruct:free',
     max_tokens: 400,
-    system: system || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.',
-    messages: [{ role: 'user', content: userMessage }],
+    messages: [
+      { role: 'system', content: systemPrompt || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.' },
+      ...messages,
+    ],
   });
-
-  const r = await proxyFetch('https://api.anthropic.com/v1/messages', {
+  const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'x-api-key': CLAUDE_API_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://renov-disparador.vercel.app',
+      'X-Title': 'Renov Agente IA',
     },
     body,
   });
   const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || `Claude API ${r.status}`);
-  return data?.content?.[0]?.text || '';
+  if (!r.ok) throw new Error(data?.error?.message || `OpenRouter ${r.status}`);
+  return data?.choices?.[0]?.message?.content || '';
 }
 
 function extractMsgText(data) {
@@ -396,9 +391,22 @@ app.get('/api/agent/config', requireAuth, (req, res) => {
   res.json({ ok: true, data: { ...agentConfig, docText: agentConfig.docText ? '(carregado)' : '' } });
 });
 
+app.post('/api/agent/chat', requireAuth, async (req, res) => {
+  const { apiKey, model, prompt, docText, messages } = req.body;
+  if (!apiKey) return res.status(400).json({ error: 'API key obrigatória' });
+  try {
+    const system = [prompt || '', docText ? `\n\n# Documento de referência:\n${docText}` : ''].join('').trim()
+                || 'Você é um assistente útil.';
+    const reply = await callOpenRouter(apiKey, model, system, messages || [{ role: 'user', content: 'Olá' }]);
+    res.json({ ok: true, reply });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/agent/config', requireAuth, (req, res) => {
-  const { active, instanceName, instanceToken, prompt, docText } = req.body;
-  agentConfig = { active: !!active, instanceName: instanceName || '', instanceToken: instanceToken || '', prompt: prompt || '', docText: docText || '' };
+  const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model } = req.body;
+  agentConfig = { active: !!active, instanceName: instanceName || '', instanceToken: instanceToken || '', prompt: prompt || '', docText: docText || '', openrouterKey: openrouterKey || '', model: model || 'meta-llama/llama-3.2-3b-instruct:free' };
   saveAgentConfig(agentConfig);
   logReq('POST', '/api/agent/config', `active=${agentConfig.active} instance=${agentConfig.instanceName}`);
   res.json({ ok: true });
@@ -434,7 +442,10 @@ app.post('/api/agent/webhook', async (req, res) => {
     const ts = new Date().toTimeString().slice(0, 8);
     console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 60)}`);
 
-    const reply = await callClaude(text);
+    const key = agentConfig.openrouterKey;
+    if (!key) return;
+    const sys = [agentConfig.prompt, agentConfig.docText ? `\n\n# Documento:\n${agentConfig.docText}` : ''].join('').trim();
+    const reply = await callOpenRouter(key, agentConfig.model, sys, [{ role: 'user', content: text }]);
     if (!reply) return;
 
     await proxyFetch(`${EVOLUTION_URL}/send/text`, {

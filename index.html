@@ -582,6 +582,22 @@
     .main-tab { background:none; border:none; border-bottom:2px solid transparent; padding:10px 20px 12px; font-family:inherit; font-size:14px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .15s; margin-bottom:-1px; display:flex; align-items:center; gap:7px; border-radius:0; }
     .main-tab:hover { color:var(--text); }
     .main-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    /* ── Chat teste ── */
+    .chat-test-box { background:#0b141a; border-radius:10px; min-height:220px; max-height:360px; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+    .chat-empty { color:var(--text-3); font-size:13px; text-align:center; margin:auto; }
+    .chat-msg { display:flex; flex-direction:column; max-width:78%; }
+    .chat-msg.user { align-self:flex-end; align-items:flex-end; }
+    .chat-msg.agent { align-self:flex-start; align-items:flex-start; }
+    .chat-bubble { padding:8px 12px; border-radius:12px; font-size:13.5px; line-height:1.48; white-space:pre-wrap; word-break:break-word; }
+    .chat-msg.user  .chat-bubble { background:#005c4b; color:#e9edef; border-radius:12px 12px 0 12px; }
+    .chat-msg.agent .chat-bubble { background:#1f2c33; color:#e9edef; border-radius:0 12px 12px 12px; border:1px solid rgba(255,255,255,.06); }
+    .chat-meta { font-size:10.5px; color:rgba(255,255,255,.35); margin-top:3px; padding:0 4px; }
+    .chat-typing { display:flex; gap:4px; padding:10px 14px; }
+    .chat-typing span { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:typingDot .9s infinite; }
+    .chat-typing span:nth-child(2) { animation-delay:.15s; }
+    .chat-typing span:nth-child(3) { animation-delay:.30s; }
+    @keyframes typingDot { 0%,60%,100%{opacity:.25;transform:scale(.8)} 30%{opacity:1;transform:scale(1)} }
+    .chat-test-input-row { display:flex; gap:8px; align-items:flex-end; }
     /* ── Agent panel ── */
     .agent-status-bar { display:flex; align-items:center; gap:14px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 18px; margin-bottom:20px; }
     .agent-badge { display:inline-flex; align-items:center; gap:7px; padding:5px 14px; border-radius:99px; font-size:13px; font-weight:700; transition:all .25s; }
@@ -1123,18 +1139,54 @@
         <div class="webhook-url-box" id="webhook-url-box" title="Clique para copiar"></div>
       </div>
 
-      <!-- Chave Claude -->
+      <!-- OpenRouter key + modelo -->
       <div class="field">
-        <label class="field-label">Chave da API Claude (Anthropic)</label>
-        <div class="token-row">
-          <input type="password" id="agent-claude-key" placeholder="sk-ant-..." />
-          <button class="btn-icon" id="btn-agent-toggle-key">👁</button>
+        <label class="field-label">Chave da API OpenRouter</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="token-row" style="flex:1">
+            <input type="password" id="agent-or-key" placeholder="sk-or-v1-..." />
+            <button class="btn-icon" id="btn-agent-toggle-key">👁</button>
+          </div>
+          <button class="btn-ghost btn-sm" id="btn-agent-test-key" style="white-space:nowrap">🔬 Testar</button>
         </div>
-        <div class="card-sub" style="margin-top:6px">Necessária para o agente gerar respostas. Obtenha em <span style="color:var(--accent)">console.anthropic.com</span></div>
+        <div id="agent-key-status" style="font-size:12px;margin-top:6px;color:var(--text-3)">Obtenha gratuitamente em <b style="color:var(--accent)">openrouter.ai</b> → Keys</div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Modelo de IA</label>
+        <select id="agent-model">
+          <option value="meta-llama/llama-3.2-3b-instruct:free">Llama 3.2 3B — rápido e gratuito</option>
+          <option value="google/gemma-3-27b-it:free">Gemma 3 27B — qualidade alta, gratuito</option>
+          <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek Chat V3 — excelente, gratuito</option>
+          <option value="qwen/qwen-2.5-7b-instruct:free">Qwen 2.5 7B — rápido, gratuito</option>
+          <option value="mistralai/mistral-7b-instruct:free">Mistral 7B — leve, gratuito</option>
+        </select>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:8px">
         <button class="btn-primary btn-lg" id="btn-agent-save" style="flex:1">💾 Salvar configuração</button>
+      </div>
+    </div>
+
+    <!-- Chat de teste -->
+    <div class="card" style="margin-top:16px">
+      <div class="row-between" style="margin-bottom:14px">
+        <div>
+          <div class="card-title" style="margin-bottom:2px">💬 Chat de teste</div>
+          <div class="card-sub" style="margin:0">Converse com o agente usando o prompt e documento configurados acima</div>
+        </div>
+        <button class="btn-ghost btn-sm" id="btn-chat-clear">🗑 Limpar</button>
+      </div>
+
+      <!-- Mensagens -->
+      <div class="chat-test-box" id="chat-test-box">
+        <div class="chat-empty" id="chat-empty">Salve a configuração e envie uma mensagem para testar o agente</div>
+      </div>
+
+      <!-- Input -->
+      <div class="chat-test-input-row">
+        <textarea id="chat-test-input" rows="1" placeholder="Digite uma mensagem de teste..." style="resize:none;flex:1;min-height:40px;max-height:120px"></textarea>
+        <button class="btn-primary" id="btn-chat-send" style="padding:10px 18px;flex-shrink:0">➤</button>
       </div>
     </div>
 
@@ -2445,6 +2497,7 @@ document.addEventListener('DOMContentLoaded', init);
 const Agent = {
   docText: '',
   pollTimer: null,
+  chatHistory: [], // [{role:'user'|'assistant', content:''}]
 
   async loadInstances() {
     const sel = document.getElementById('agent-instance-select');
@@ -2473,11 +2526,14 @@ const Agent = {
       document.getElementById('agent-instance-select').value = d.instanceName || '';
       document.getElementById('agent-token').value = d.instanceToken || '';
       document.getElementById('agent-prompt').value = d.prompt || '';
+      if (d.model) document.getElementById('agent-model').value = d.model;
       if (d.docText === '(carregado)') {
         document.getElementById('agent-doc-name').textContent = '📄 Documento carregado no servidor';
         document.getElementById('agent-doc-name').classList.remove('hidden');
       }
       this.updateBadge(d.active);
+      const savedKey = localStorage.getItem('agent_or_key');
+      if (savedKey) document.getElementById('agent-or-key').value = savedKey;
     } catch (_) {}
   },
 
@@ -2488,20 +2544,20 @@ const Agent = {
       const instanceName = document.getElementById('agent-instance-select').value;
       const instanceToken = document.getElementById('agent-token').value.trim();
       const prompt = document.getElementById('agent-prompt').value.trim();
-      const claudeKey = document.getElementById('agent-claude-key').value.trim();
+      const openrouterKey = document.getElementById('agent-or-key').value.trim();
+      const model = document.getElementById('agent-model').value;
       if (!instanceToken) { UI.addBanner('warning', 'Informe o token da instância.'); return; }
       if (!prompt) { UI.addBanner('warning', 'Informe o prompt do agente.'); return; }
+      if (!openrouterKey) { UI.addBanner('warning', 'Informe a chave da API OpenRouter.'); return; }
 
-      const body = { instanceName, instanceToken, prompt, docText: this.docText };
       const res = await fetch('/api/agent/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ instanceName, instanceToken, prompt, docText: this.docText, openrouterKey, model }),
       });
       const j = await res.json();
       if (j.ok) {
+        localStorage.setItem('agent_or_key', openrouterKey);
         UI.addBanner('info', '✓ Configuração salva!');
-        // Salva chave Claude localmente (não vai ao servidor por segurança)
-        if (claudeKey) localStorage.setItem('agent_claude_key', claudeKey);
         document.getElementById('agent-instance-label').textContent = instanceName ? '📱 ' + instanceName : '';
       } else {
         UI.addBanner('error', 'Erro ao salvar configuração.');
@@ -2510,6 +2566,115 @@ const Agent = {
       UI.addBanner('error', 'Erro: ' + err.message);
     } finally {
       btn.disabled = false; btn.textContent = '💾 Salvar configuração';
+    }
+  },
+
+  async testKey() {
+    const key = document.getElementById('agent-or-key').value.trim();
+    const statusEl = document.getElementById('agent-key-status');
+    if (!key) { statusEl.style.color = '#f87171'; statusEl.textContent = '⚠ Insira a chave antes de testar.'; return; }
+    const btn = document.getElementById('btn-agent-test-key');
+    btn.disabled = true; btn.textContent = '⏳ Testando...';
+    statusEl.style.color = 'var(--text-3)'; statusEl.textContent = 'Verificando chave...';
+    try {
+      const model = document.getElementById('agent-model').value;
+      const res = await fetch('/api/agent/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key, model, prompt: 'Responda apenas: OK', messages: [{ role: 'user', content: 'teste' }] }),
+      });
+      const j = await res.json();
+      if (j.ok) {
+        statusEl.style.color = '#4ade80';
+        statusEl.textContent = '✓ API funcionando! Modelo respondeu corretamente.';
+        localStorage.setItem('agent_or_key', key);
+      } else {
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '✗ Erro: ' + (j.error || 'chave inválida');
+      }
+    } catch (err) {
+      statusEl.style.color = '#f87171';
+      statusEl.textContent = '✗ Falha de conexão: ' + err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🔬 Testar';
+    }
+  },
+
+  // ── Chat de teste ────────────────────────────────────────
+  chatAddMsg(role, text) {
+    const box = document.getElementById('chat-test-box');
+    const empty = document.getElementById('chat-empty');
+    if (empty) empty.remove();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-msg ' + (role === 'user' ? 'user' : 'agent');
+
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    bubble.textContent = text;
+
+    const meta = document.createElement('div');
+    meta.className = 'chat-meta';
+    meta.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    wrap.appendChild(bubble);
+    wrap.appendChild(meta);
+    box.appendChild(wrap);
+    box.scrollTop = box.scrollHeight;
+    return wrap;
+  },
+
+  chatShowTyping() {
+    const box = document.getElementById('chat-test-box');
+    const div = document.createElement('div');
+    div.className = 'chat-msg agent';
+    div.id = 'chat-typing-indicator';
+    div.innerHTML = '<div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>';
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  },
+
+  chatHideTyping() {
+    const el = document.getElementById('chat-typing-indicator');
+    if (el) el.remove();
+  },
+
+  async chatSend() {
+    const input = document.getElementById('chat-test-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const key = document.getElementById('agent-or-key').value.trim();
+    if (!key) { UI.addBanner('warning', 'Insira e salve a chave OpenRouter antes de testar.'); return; }
+
+    const btn = document.getElementById('btn-chat-send');
+    btn.disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+
+    this.chatAddMsg('user', text);
+    this.chatHistory.push({ role: 'user', content: text });
+    this.chatShowTyping();
+
+    try {
+      const model = document.getElementById('agent-model').value;
+      const prompt = document.getElementById('agent-prompt').value.trim();
+      const res = await fetch('/api/agent/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key, model, prompt, docText: this.docText, messages: this.chatHistory }),
+      });
+      const j = await res.json();
+      this.chatHideTyping();
+      if (j.ok && j.reply) {
+        this.chatHistory.push({ role: 'assistant', content: j.reply });
+        this.chatAddMsg('agent', j.reply);
+      } else {
+        this.chatAddMsg('agent', '⚠ Erro: ' + (j.error || 'sem resposta'));
+      }
+    } catch (err) {
+      this.chatHideTyping();
+      this.chatAddMsg('agent', '⚠ Falha de conexão: ' + err.message);
+    } finally {
+      btn.disabled = false;
     }
   },
 
@@ -2602,27 +2767,39 @@ const Agent = {
       });
     };
 
-    // Chave Claude salva localmente
-    const savedKey = localStorage.getItem('agent_claude_key');
-    if (savedKey) document.getElementById('agent-claude-key').value = savedKey;
-
-    // Botões
+    // Botões config
     document.getElementById('btn-agent-load-instances').onclick = () => this.loadInstances();
     document.getElementById('btn-agent-save').onclick = () => this.save();
     document.getElementById('btn-toggle-agent').onclick = () => this.toggle();
+    document.getElementById('btn-agent-test-key').onclick = () => this.testKey();
     document.getElementById('btn-agent-clear-log').onclick = () => {
       document.getElementById('agent-log').innerHTML = '<div class="agent-log-line" style="color:var(--text-3)">Log limpo.</div>';
     };
 
-    // Visibilidade token
+    // Visibilidade token / chave
     document.getElementById('btn-agent-toggle-token').onclick = () => {
       const inp = document.getElementById('agent-token');
       inp.type = inp.type === 'password' ? 'text' : 'password';
     };
     document.getElementById('btn-agent-toggle-key').onclick = () => {
-      const inp = document.getElementById('agent-claude-key');
+      const inp = document.getElementById('agent-or-key');
       inp.type = inp.type === 'password' ? 'text' : 'password';
     };
+
+    // Chat de teste
+    document.getElementById('btn-chat-send').onclick = () => this.chatSend();
+    document.getElementById('btn-chat-clear').onclick = () => {
+      this.chatHistory = [];
+      document.getElementById('chat-test-box').innerHTML = '<div class="chat-empty" id="chat-empty">Conversa limpa. Envie uma mensagem para começar.</div>';
+    };
+    const chatInput = document.getElementById('chat-test-input');
+    chatInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.chatSend(); }
+    });
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+    });
 
     // Upload documento
     document.getElementById('agent-doc-file').onchange = e => {
