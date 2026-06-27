@@ -399,24 +399,40 @@
     .media-type-btn:hover { border-color: var(--accent); color: var(--text); }
     .media-type-btn.active { border-color: var(--accent); background: var(--accent-glow); color: var(--accent); }
 
-    /* ── Upload de arquivo ── */
-    .media-source-tabs { display:flex; gap:8px; margin-bottom:14px; }
-    .media-tab { flex:1; padding:8px 0; border-radius:var(--radius-sm); border:1.5px solid var(--border); background:transparent; color:var(--text-2); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+    /* ── Multi-mídia ── */
+    .media-item-card { background:var(--card2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px; margin-bottom:10px; position:relative; }
+    .mic-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .mic-num { font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.05em; }
+    .mic-remove { background:none; border:none; color:var(--text-3); cursor:pointer; font-size:15px; padding:2px 6px; border-radius:4px; transition:all .15s; }
+    .mic-remove:hover { color:var(--red); background:rgba(239,68,68,.1); }
+    .mic-type-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:10px; }
+    .mic-type { border:1.5px solid var(--border); background:var(--bg); color:var(--text-2); border-radius:var(--radius-sm); padding:7px 4px; text-align:center; cursor:pointer; font-size:11px; font-weight:500; transition:all .15s; }
+    .mic-type:hover { border-color:var(--accent); color:var(--text); }
+    .mic-type.active { border-color:var(--accent); background:var(--accent-glow); color:var(--accent); }
+    .media-source-tabs { display:flex; gap:6px; margin-bottom:10px; }
+    .media-tab { flex:1; padding:7px 0; border-radius:var(--radius-sm); border:1.5px solid var(--border); background:transparent; color:var(--text-2); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
     .media-tab.active { border-color:var(--accent); background:var(--accent-glow); color:var(--accent); }
-    .upload-zone { border:2px dashed var(--border); border-radius:var(--radius-sm); padding:22px 16px; text-align:center; cursor:pointer; transition:all 0.2s; position:relative; }
+    .mic-url { width:100%; background:#0f1117; border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:13px; padding:9px 12px; outline:none; transition:border-color .15s; }
+    .mic-url:focus { border-color:var(--accent); }
+    .mic-caption { width:100%; background:transparent; border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:12px; padding:7px 10px; outline:none; margin-top:8px; transition:border-color .15s; }
+    .mic-caption:focus { border-color:var(--accent); }
+    .mic-caption::placeholder { color:var(--text-3); }
+    .upload-zone { border:2px dashed var(--border); border-radius:var(--radius-sm); padding:18px 12px; text-align:center; cursor:pointer; transition:all .2s; position:relative; }
     .upload-zone:hover,.upload-zone.drag-over { border-color:var(--accent); background:var(--accent-glow); }
     .upload-zone input[type=file] { position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2; }
-    .upload-zone .uz-icon { font-size:26px; margin-bottom:6px; }
-    .upload-zone .uz-label { font-size:13px; color:var(--text-2); }
-    .upload-zone .uz-sub { font-size:11px; color:var(--text-3); margin-top:3px; }
-    .file-preview { display:flex; align-items:center; gap:10px; background:var(--card2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; margin-top:8px; }
-    .file-preview .fp-icon { font-size:20px; }
+    .upload-zone .uz-icon { font-size:22px; margin-bottom:4px; }
+    .upload-zone .uz-label { font-size:12px; color:var(--text-2); }
+    .upload-zone .uz-sub { font-size:10px; color:var(--text-3); margin-top:2px; }
+    .file-preview { display:flex; align-items:center; gap:10px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 12px; margin-top:6px; }
+    .file-preview .fp-icon { font-size:18px; }
     .file-preview .fp-info { flex:1; min-width:0; }
-    .file-preview .fp-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .file-preview .fp-size { font-size:11px; color:var(--text-3); }
-    .file-preview .fp-remove { background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px;padding:2px; }
+    .file-preview .fp-name { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .file-preview .fp-size { font-size:10px; color:var(--text-3); }
+    .file-preview .fp-remove { background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;padding:2px; }
     .file-preview .fp-remove:hover { color:var(--red); }
-    .ptt-badge { display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);border-radius:20px;padding:4px 10px;font-size:11px;color:#4ade80;margin-top:8px; }
+    .ptt-badge { display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:3px 9px;font-size:10px;color:#4ade80;margin-top:6px; }
+    .btn-add-media { display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);border:1.5px dashed var(--border);background:transparent;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;width:100%;justify-content:center;margin-top:4px; }
+    .btn-add-media:hover { border-color:var(--accent);color:var(--accent); }
     /* ── Playbook ── */
     .playbook-dropdown { position:relative; display:inline-block; }
     .btn-playbook { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s; }
@@ -808,53 +824,8 @@
         </label>
 
         <div class="hidden" id="media-panel">
-          <div class="media-type-grid">
-            <button class="media-type-btn active" data-mtype="image"><span class="mti">🖼️</span>Imagem</button>
-            <button class="media-type-btn" data-mtype="video"><span class="mti">🎬</span>Vídeo</button>
-            <button class="media-type-btn" data-mtype="audio"><span class="mti">🎤</span>Áudio</button>
-            <button class="media-type-btn" data-mtype="document"><span class="mti">📄</span>Documento</button>
-          </div>
-
-          <div class="media-source-tabs">
-            <button class="media-tab active" id="tab-url">🔗 Enviar por URL</button>
-            <button class="media-tab" id="tab-upload">📁 Upload de arquivo</button>
-          </div>
-
-          <!-- URL mode -->
-          <div id="media-url-mode">
-            <div class="field">
-              <label class="field-label">URL da mídia</label>
-              <input type="text" id="media-url" placeholder="https://exemplo.com/imagem.jpg" />
-            </div>
-          </div>
-
-          <!-- Upload mode -->
-          <div id="media-upload-mode" class="hidden">
-            <div class="upload-zone" id="upload-zone">
-              <input type="file" id="media-file-input" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/ogg,audio/wav,audio/mp4,.enc" />
-              <div class="uz-icon">📎</div>
-              <div class="uz-label">Clique ou arraste o arquivo aqui</div>
-              <div class="uz-sub" id="upload-hint">JPG · PNG · MP4 — Imagem até 10 MB · Vídeo/Áudio até 50 MB</div>
-            </div>
-            <div class="file-preview hidden" id="file-preview">
-              <span class="fp-icon" id="fp-icon">📄</span>
-              <div class="fp-info">
-                <div class="fp-name" id="fp-name">arquivo</div>
-                <div class="fp-size" id="fp-size">0 KB</div>
-              </div>
-              <button class="fp-remove" id="fp-remove" title="Remover">✕</button>
-            </div>
-            <div class="ptt-badge hidden" id="ptt-badge">🎤 Enviado como áudio gravado na hora (PTT)</div>
-          </div>
-
-          <div class="field" id="media-caption-field" style="margin-top:12px">
-            <label class="field-label">Legenda (opcional)</label>
-            <input type="text" id="media-caption" placeholder="Descrição da mídia..." />
-          </div>
-          <div class="field hidden" id="media-filename-field">
-            <label class="field-label">Nome do arquivo</label>
-            <input type="text" id="media-filename" placeholder="documento.pdf" />
-          </div>
+          <div id="media-items-list"></div>
+          <button class="btn-add-media" id="btn-add-media">＋ Adicionar outra mídia</button>
         </div>
       </div>
 
@@ -1005,12 +976,7 @@ const AppState = {
   excelRows: null,
   userScrolledLog: false,
   logCount: 0,
-  mediaType: 'image',
-  mediaMode: 'url',    // 'url' | 'upload'
-  mediaBase64: null,
-  mediaMime: null,
-  mediaOrigName: null,
-  mediaPtt: false,
+  mediaItems: [],      // [{ type, mode, url, base64, mime, origName, ptt, caption }]
   qrTimer: null,
   qrCountdown: 60,
 };
@@ -1167,13 +1133,8 @@ const Stepper = {
     const maxV = document.getElementById('delay-max').value;
     document.getElementById('pre-delay').textContent = `${minV}s – ${maxV}s`;
     const mediaOn = document.getElementById('toggle-media').checked;
-    const mediaUrl = document.getElementById('media-url').value.trim();
-    let mediaLabel = 'Nenhuma';
-    if (mediaOn) {
-      if (AppState.mediaMode === 'upload' && AppState.mediaBase64) mediaLabel = AppState.mediaOrigName || AppState.mediaType;
-      else if (AppState.mediaMode === 'url' && mediaUrl) mediaLabel = AppState.mediaType;
-    }
-    document.getElementById('pre-media').textContent = mediaLabel;
+    const activeCount = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url'&&m.url.trim())||(m.mode==='upload'&&m.base64)).length : 0;
+    document.getElementById('pre-media').textContent = activeCount ? `${activeCount} arquivo(s)` : 'Nenhuma';
   }
 };
 
@@ -1587,15 +1548,7 @@ const Dispatch = {
     let interrupted = false;
 
     const mediaOn = document.getElementById('toggle-media').checked;
-    const mediaUrl = document.getElementById('media-url').value.trim();
-    const mediaCaption = document.getElementById('media-caption').value.trim();
-    const mediaFilename = document.getElementById('media-filename').value.trim();
-    const mediaType = AppState.mediaType;
-    const mediaMode = AppState.mediaMode;
-    const mediaBase64 = AppState.mediaBase64;
-    const mediaMime = AppState.mediaMime;
-    const mediaOrigName = AppState.mediaOrigName;
-    const mediaPtt = AppState.mediaPtt;
+    const activeMedia = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url' && m.url.trim()) || (m.mode==='upload' && m.base64)) : [];
 
     document.getElementById('btn-start').classList.add('hidden');
     document.getElementById('btn-stop').classList.remove('hidden');
@@ -1613,12 +1566,18 @@ const Dispatch = {
       const text = Message.interpolate(Message.pickRandom(), contact);
       let result;
 
-      if (mediaOn && mediaMode === 'upload' && mediaBase64) {
-        result = await API.sendMediaUpload(token, contact.phone, mediaBase64, mediaType, mediaMime, mediaCaption, mediaOrigName, mediaPtt);
-        if (!result.ok && text) result = await API.sendText(token, contact.phone, text);
-      } else if (mediaOn && mediaMode === 'url' && mediaUrl) {
-        result = await API.sendMedia(token, contact.phone, mediaUrl, mediaType, mediaCaption, mediaFilename);
-        if (!result.ok && text) result = await API.sendText(token, contact.phone, text);
+      if (activeMedia.length > 0) {
+        // Envia texto primeiro (se houver), depois cada mídia
+        if (text) await API.sendText(token, contact.phone, text);
+        let lastResult = { ok: true };
+        for (const m of activeMedia) {
+          if (m.mode === 'upload' && m.base64) {
+            lastResult = await API.sendMediaUpload(token, contact.phone, m.base64, m.type, m.mime, m.caption, m.origName, m.ptt);
+          } else if (m.mode === 'url' && m.url.trim()) {
+            lastResult = await API.sendMedia(token, contact.phone, m.url.trim(), m.type, m.caption, m.origName || '');
+          }
+        }
+        result = lastResult;
       } else {
         result = await API.sendText(token, contact.phone, text);
       }
@@ -1810,91 +1769,141 @@ function init() {
   document.getElementById('toggle-variations').onchange = e => Message.onToggle(e.target.checked);
   document.getElementById('btn-add-variation').onclick = () => Message.addVariation();
 
+  // ── Multi-mídia ─────────────────────────────────────────────
+  const ACCEPTS = { image:'image/jpeg,image/png,image/gif,image/webp,.enc', video:'video/mp4,video/quicktime,video/avi', audio:'audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac', document:'application/pdf,.doc,.docx' };
+  const MTYPE_ICONS = { image:'🖼️', video:'🎬', audio:'🎤', document:'📄' };
+  const MTYPE_LABELS = { image:'Imagem', video:'Vídeo', audio:'Áudio', document:'Documento' };
+  let _micIdSeq = 0;
+
+  const MediaItems = {
+    add() {
+      if (AppState.mediaItems.length >= 4) return;
+      const id = _micIdSeq++;
+      AppState.mediaItems.push({ id, type:'image', mode:'url', url:'', base64:null, mime:null, origName:null, ptt:false, caption:'' });
+      this.render();
+      if (AppState.mediaItems.length >= 4) document.getElementById('btn-add-media').classList.add('hidden');
+    },
+
+    remove(id) {
+      AppState.mediaItems = AppState.mediaItems.filter(m => m.id !== id);
+      this.render();
+      document.getElementById('btn-add-media').classList.remove('hidden');
+    },
+
+    get(id) { return AppState.mediaItems.find(m => m.id === id); },
+
+    render() {
+      const list = document.getElementById('media-items-list');
+      list.innerHTML = '';
+      AppState.mediaItems.forEach((item, idx) => {
+        const card = document.createElement('div');
+        card.className = 'media-item-card';
+        card.dataset.id = item.id;
+
+        const typeButtons = Object.entries(MTYPE_LABELS).map(([t, l]) =>
+          `<button class="mic-type${item.type===t?' active':''}" data-mtype="${t}">${MTYPE_ICONS[t]} ${l}</button>`
+        ).join('');
+
+        const filePreviewHtml = item.base64
+          ? `<div class="file-preview"><span class="fp-icon">${MTYPE_ICONS[item.type]}</span><div class="fp-info"><div class="fp-name">${esc(item.origName||'arquivo')}</div><div class="fp-size">${item._sizeLabel||''}</div></div><button class="fp-remove" data-action="clear-file">✕</button></div>`
+          : '';
+        const uzHidden = item.base64 ? 'hidden' : '';
+        const fpHidden = item.base64 ? '' : 'hidden';
+
+        card.innerHTML = `
+          <div class="mic-header">
+            <span class="mic-num">Mídia ${idx+1}</span>
+            ${AppState.mediaItems.length > 1 ? `<button class="mic-remove" data-action="remove">✕ Remover</button>` : ''}
+          </div>
+          <div class="mic-type-grid">${typeButtons}</div>
+          <div class="media-source-tabs">
+            <button class="media-tab${item.mode==='url'?' active':''}" data-mode="url">🔗 URL</button>
+            <button class="media-tab${item.mode==='upload'?' active':''}" data-mode="upload">📁 Upload</button>
+          </div>
+          <div class="mic-url-mode${item.mode==='upload'?' hidden':''}">
+            <input class="mic-url" type="text" placeholder="https://exemplo.com/arquivo.jpg" value="${esc(item.url)}" />
+          </div>
+          <div class="mic-upload-mode${item.mode==='url'?' hidden':''}">
+            <div class="upload-zone ${uzHidden}">
+              <input type="file" class="mic-file-input" accept="${ACCEPTS[item.type]||'*/*'}" />
+              <div class="uz-icon">📎</div>
+              <div class="uz-label">Clique ou arraste</div>
+              <div class="uz-sub">Imagem ≤10 MB · Vídeo/Áudio ≤50 MB</div>
+            </div>
+            <div class="file-preview ${fpHidden}">
+              ${item.base64 ? `<span class="fp-icon">${MTYPE_ICONS[item.type]}</span><div class="fp-info"><div class="fp-name">${esc(item.origName||'arquivo')}</div><div class="fp-size">${item._sizeLabel||''}</div></div><button class="fp-remove" data-action="clear-file">✕</button>` : ''}
+            </div>
+            ${item.ptt ? '<div class="ptt-badge">🎤 Enviado como áudio gravado na hora (PTT)</div>' : ''}
+          </div>
+          <input class="mic-caption" type="text" placeholder="Legenda (opcional)" value="${esc(item.caption)}" />
+        `;
+
+        // Events
+        card.querySelector('.mic-remove')?.addEventListener('click', () => this.remove(item.id));
+
+        card.querySelectorAll('.mic-type').forEach(btn => btn.addEventListener('click', () => {
+          const m = this.get(item.id); if (!m) return;
+          m.type = btn.dataset.mtype;
+          m.ptt = m.type === 'audio' && m.mode === 'upload';
+          card.querySelector('.mic-file-input').accept = ACCEPTS[m.type] || '*/*';
+          this.render();
+        }));
+
+        card.querySelectorAll('.media-tab').forEach(btn => btn.addEventListener('click', () => {
+          const m = this.get(item.id); if (!m) return;
+          m.mode = btn.dataset.mode;
+          m.ptt = m.type === 'audio' && m.mode === 'upload';
+          this.render();
+        }));
+
+        card.querySelector('.mic-url')?.addEventListener('input', e => {
+          const m = this.get(item.id); if (m) m.url = e.target.value;
+        });
+        card.querySelector('.mic-caption')?.addEventListener('input', e => {
+          const m = this.get(item.id); if (m) m.caption = e.target.value;
+        });
+
+        const fileInput = card.querySelector('.mic-file-input');
+        const zone = card.querySelector('.upload-zone');
+
+        const handleFile = file => {
+          if (!file) return;
+          const MB = file.size / 1024 / 1024;
+          const maxMB = file.type.startsWith('image/') ? 10 : 50;
+          if (MB > maxMB) { alert(`Arquivo muito grande (${MB.toFixed(1)} MB). Limite: ${maxMB} MB.`); return; }
+          const m = this.get(item.id); if (!m) return;
+          m.origName = file.name;
+          m.mime = file.type;
+          m.ptt = m.type === 'audio';
+          m._sizeLabel = MB < 1 ? `${(file.size/1024).toFixed(0)} KB` : `${MB.toFixed(1)} MB`;
+          const reader = new FileReader();
+          reader.onload = ev => { m.base64 = ev.target.result; this.render(); };
+          reader.readAsDataURL(file);
+        };
+
+        fileInput?.addEventListener('change', e => handleFile(e.target.files[0]));
+        zone?.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone?.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone?.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+
+        card.querySelector('[data-action="clear-file"]')?.addEventListener('click', () => {
+          const m = this.get(item.id); if (!m) return;
+          m.base64 = null; m.origName = null; m.mime = null; m.ptt = false; m._sizeLabel = '';
+          this.render();
+        });
+
+        list.appendChild(card);
+      });
+    }
+  };
+
   // Media toggle
   document.getElementById('toggle-media').onchange = e => {
-    document.getElementById('media-panel').classList.toggle('hidden', !e.target.checked);
+    const on = e.target.checked;
+    document.getElementById('media-panel').classList.toggle('hidden', !on);
+    if (on && AppState.mediaItems.length === 0) { MediaItems.add(); }
   };
-
-  // Media type buttons
-  document.querySelectorAll('.media-type-btn').forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll('.media-type-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      AppState.mediaType = btn.dataset.mtype;
-      const isDoc = AppState.mediaType === 'document';
-      const isAudio = AppState.mediaType === 'audio';
-      document.getElementById('media-filename-field').classList.toggle('hidden', !isDoc);
-      document.getElementById('media-caption-field').classList.toggle('hidden', isDoc);
-      // Atualiza accept do input de arquivo conforme tipo
-      const accepts = { image:'image/jpeg,image/png,image/gif,image/webp,.enc', video:'video/mp4,video/quicktime,video/avi', audio:'audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac', document:'application/pdf,.doc,.docx,application/octet-stream' };
-      document.getElementById('media-file-input').accept = accepts[AppState.mediaType] || '*/*';
-      // PTT badge
-      const pttBadge = document.getElementById('ptt-badge');
-      const isUpload = AppState.mediaMode === 'upload';
-      pttBadge.classList.toggle('hidden', !(isAudio && isUpload));
-      AppState.mediaPtt = isAudio && isUpload;
-    };
-  });
-
-  // Tabs URL / Upload
-  document.getElementById('tab-url').onclick = () => {
-    AppState.mediaMode = 'url';
-    document.getElementById('tab-url').classList.add('active');
-    document.getElementById('tab-upload').classList.remove('active');
-    document.getElementById('media-url-mode').classList.remove('hidden');
-    document.getElementById('media-upload-mode').classList.add('hidden');
-    AppState.mediaBase64 = null; AppState.mediaPtt = false;
-    document.getElementById('ptt-badge').classList.add('hidden');
-  };
-  document.getElementById('tab-upload').onclick = () => {
-    AppState.mediaMode = 'upload';
-    document.getElementById('tab-upload').classList.add('active');
-    document.getElementById('tab-url').classList.remove('active');
-    document.getElementById('media-url-mode').classList.add('hidden');
-    document.getElementById('media-upload-mode').classList.remove('hidden');
-    const isAudio = AppState.mediaType === 'audio';
-    AppState.mediaPtt = isAudio;
-    document.getElementById('ptt-badge').classList.toggle('hidden', !isAudio);
-  };
-
-  // Upload de arquivo
-  const fileInput = document.getElementById('media-file-input');
-  const uploadZone = document.getElementById('upload-zone');
-
-  function handleFile(file) {
-    if (!file) return;
-    const MB = file.size / 1024 / 1024;
-    const isImg = file.type.startsWith('image/');
-    const maxMB = isImg ? 10 : 50;
-    if (MB > maxMB) { alert(`Arquivo muito grande (${MB.toFixed(1)} MB). Limite: ${maxMB} MB.`); return; }
-    const icons = { image: '🖼️', video: '🎬', audio: '🎤', document: '📄' };
-    document.getElementById('fp-icon').textContent = icons[AppState.mediaType] || '📄';
-    document.getElementById('fp-name').textContent = file.name;
-    document.getElementById('fp-size').textContent = MB < 1 ? `${(file.size/1024).toFixed(0)} KB` : `${MB.toFixed(1)} MB`;
-    document.getElementById('file-preview').classList.remove('hidden');
-    uploadZone.classList.add('hidden');
-    AppState.mediaOrigName = file.name;
-    AppState.mediaMime = file.type;
-    const isAudio = AppState.mediaType === 'audio';
-    AppState.mediaPtt = isAudio;
-    document.getElementById('ptt-badge').classList.toggle('hidden', !isAudio);
-    const reader = new FileReader();
-    reader.onload = e => { AppState.mediaBase64 = e.target.result; };
-    reader.readAsDataURL(file);
-  }
-
-  fileInput.onchange = e => handleFile(e.target.files[0]);
-  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-  uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
-
-  document.getElementById('fp-remove').onclick = () => {
-    AppState.mediaBase64 = null; AppState.mediaOrigName = null; AppState.mediaMime = null; AppState.mediaPtt = false;
-    fileInput.value = '';
-    document.getElementById('file-preview').classList.add('hidden');
-    document.getElementById('ptt-badge').classList.add('hidden');
-    uploadZone.classList.remove('hidden');
-  };
+  document.getElementById('btn-add-media').onclick = () => MediaItems.add();
 
   // Playbook dropdown
   const playbookMenu = document.getElementById('playbook-menu');
