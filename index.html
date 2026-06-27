@@ -2756,8 +2756,8 @@ const Agent = {
   },
 
   init() {
-    // Webhook URL
-    const webhookUrl = window.location.origin + '/api/agent/webhook';
+    // Webhook URL — usa protocol+host para evitar null em certos contextos
+    const webhookUrl = window.location.protocol + '//' + window.location.host + '/api/agent/webhook';
     const wbox = document.getElementById('webhook-url-box');
     wbox.textContent = webhookUrl;
     wbox.onclick = () => {
