@@ -447,6 +447,32 @@
     .tp-sep { font-size:22px; font-weight:700; color:var(--text-3); }
     .tp-label { font-size:11px; color:var(--text-2); font-weight:600; }
     .delay-rate-box { display:flex; align-items:center; gap:10px; padding:12px 16px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.15); border-radius:var(--radius-sm); font-size:13px; margin-top:16px; }
+    /* ── WhatsApp Preview ── */
+    .wa-preview { background:#0b141a; border-radius:14px; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; margin-top:16px; border:1px solid rgba(255,255,255,.07); }
+    .wa-header { background:#202c33; padding:10px 16px; display:flex; align-items:center; gap:12px; }
+    .wa-avatar { width:38px; height:38px; border-radius:50%; background:#025d4b; display:flex; align-items:center; justify-content:center; font-weight:700; color:#fff; font-size:16px; flex-shrink:0; }
+    .wa-contact-name { font-size:15px; font-weight:600; color:#e9edef; }
+    .wa-contact-sub { font-size:12px; color:#8696a0; }
+    .wa-body { min-height:160px; padding:16px 12px; background:#0b141a url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='1' fill='rgba(255,255,255,.03)'/%3E%3C/svg%3E"); display:flex; flex-direction:column; gap:6px; }
+    .wa-date-pill { text-align:center; font-size:11.5px; color:#8696a0; background:rgba(11,20,26,.8); border:1px solid rgba(255,255,255,.06); border-radius:8px; padding:4px 10px; align-self:center; margin-bottom:4px; }
+    .wa-msg { display:flex; justify-content:flex-end; }
+    .wa-bubble { max-width:82%; background:#005c4b; border-radius:12px 12px 0 12px; padding:7px 10px 4px; position:relative; box-shadow:0 1px 2px rgba(0,0,0,.35); }
+    .wa-bubble::after { content:''; position:absolute; bottom:0; right:-8px; border:8px solid transparent; border-left-color:#005c4b; border-bottom-color:#005c4b; border-right:none; border-top:none; }
+    .wa-text { color:#e9edef; font-size:14.2px; line-height:1.48; white-space:pre-wrap; word-break:break-word; margin:0; }
+    .wa-media-placeholder { background:rgba(0,0,0,.25); border-radius:8px; padding:12px; margin-bottom:6px; display:flex; align-items:center; gap:8px; color:#8696a0; font-size:13px; }
+    .wa-meta { display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:3px; }
+    .wa-time { font-size:11px; color:rgba(233,237,239,.6); }
+    .wa-ticks { font-size:14px; color:#53bdeb; letter-spacing:-2px; }
+    .wa-label { font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em; margin-top:16px; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+    /* ── Connection card ── */
+    .conn-card { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; margin-top:4px; }
+    .conn-status-row { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+    .conn-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:99px; font-size:12px; font-weight:700; }
+    .conn-badge.connected { background:rgba(34,197,94,.12); color:#4ade80; border:1px solid rgba(34,197,94,.25); }
+    .conn-badge.disconnected { background:rgba(239,68,68,.10); color:#f87171; border:1px solid rgba(239,68,68,.22); }
+    .conn-badge.checking { background:rgba(250,204,21,.10); color:#fbbf24; border:1px solid rgba(250,204,21,.22); }
+    .conn-phone-num { font-size:13px; color:var(--accent); font-weight:600; font-family:monospace; }
+    .conn-btns { display:flex; gap:8px; flex-wrap:wrap; }
     /* ── Último contato ── */
     .last-contact-box { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.2); border-radius:var(--radius-sm); font-size:12px; margin-top:8px; flex-wrap:wrap; }
     .lc-label { color:var(--text-3); font-size:11px; white-space:nowrap; }
@@ -679,21 +705,34 @@
         <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
       </div>
 
-      <!-- Seção de conexão -->
-      <div class="connect-section">
-        <div class="connect-section-title">🔌 Conectar instância ao WhatsApp</div>
-        <div class="connect-btns">
-          <button class="btn-blue btn-sm" id="btn-show-qr">📷 Conectar via QR Code</button>
-          <button class="btn-ghost btn-sm" id="btn-show-pair">🔢 Conectar via Código</button>
-          <button class="btn-ghost btn-sm" id="btn-check-status">🔄 Verificar Status</button>
+      <!-- Card de conexão -->
+      <div class="conn-card">
+        <div class="conn-status-row">
+          <div class="conn-badge disconnected" id="conn-badge">● Desconectado</div>
+          <span class="conn-phone-num hidden" id="conn-phone-num"></span>
+          <button class="btn-ghost btn-sm" id="btn-check-status" style="margin-left:auto">🔄 Verificar</button>
         </div>
 
-        <!-- Pair code input -->
-        <div class="hidden mt-12" id="pair-input-section">
-          <label class="field-label">Número de telefone (com DDI)</label>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="pair-phone" placeholder="Ex: 5511999999999" style="flex:1" />
-            <button class="btn-primary btn-sm" id="btn-request-pair">Gerar Código</button>
+        <!-- Ações quando desconectado -->
+        <div id="conn-disconnected-actions">
+          <div class="conn-btns">
+            <button class="btn-primary btn-sm" id="btn-show-qr">📷 Conectar via QR Code</button>
+            <button class="btn-ghost btn-sm" id="btn-show-pair">🔢 Conectar via Código</button>
+          </div>
+          <div class="hidden mt-12" id="pair-input-section">
+            <label class="field-label" style="margin-top:8px">Número de telefone (com DDI)</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="pair-phone" placeholder="Ex: 5511999999999" style="flex:1" />
+              <button class="btn-primary btn-sm" id="btn-request-pair">Gerar Código</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ações quando conectado -->
+        <div class="hidden" id="conn-connected-actions">
+          <div class="conn-btns">
+            <button class="btn-ghost btn-sm" id="btn-disconnect">🔌 Desconectar</button>
+            <button class="btn-ghost btn-sm" id="btn-restart-inst">🔄 Reconectar</button>
           </div>
         </div>
       </div>
@@ -812,11 +851,36 @@
           <button class="btn-playbook" id="btn-playbook">💡 Variações do Playbook</button>
           <div class="playbook-menu hidden" id="playbook-menu"></div>
         </div>
-        <button class="btn-ghost btn-sm" id="btn-preview">👁 Pré-visualizar</button>
       </div>
 
+      <!-- Pré-visualização estilo WhatsApp -->
+      <div id="wa-preview-wrap">
+        <div class="wa-label">👁 Como vai aparecer no WhatsApp</div>
+        <div class="wa-preview">
+          <div class="wa-header">
+            <div class="wa-avatar" id="wa-avatar-letter">C</div>
+            <div>
+              <div class="wa-contact-name" id="wa-contact-name">Contato</div>
+              <div class="wa-contact-sub">online</div>
+            </div>
+          </div>
+          <div class="wa-body" id="wa-body">
+            <div class="wa-date-pill" id="wa-date-pill">Hoje</div>
+            <div class="wa-msg" id="wa-msg-wrap">
+              <div class="wa-bubble" id="wa-bubble">
+                <p class="wa-text" id="wa-text">Digite sua mensagem acima...</p>
+                <div class="wa-meta">
+                  <span class="wa-time" id="wa-time">09:30</span>
+                  <span class="wa-ticks">✓✓</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview box legado (hidden, mantido para compatibilidade) -->
       <div class="hidden" id="preview-container">
-        <div class="preview-label mt-12">Pré-visualização</div>
         <div class="preview-box" id="preview-box"></div>
       </div>
 
@@ -1034,6 +1098,7 @@ const AppState = {
   mediaItems: [],      // [{ type, mode, url, base64, mime, origName, ptt, caption }]
   qrTimer: null,
   qrCountdown: 60,
+  connPollTimer: null,
 };
 
 // ============================================================
@@ -1227,13 +1292,46 @@ const Instances = {
   onSelect(name, connected) {
     const dot = document.getElementById('instance-dot');
     const lbl = document.getElementById('instance-status-label');
-    if (!name) { dot.className = 'status-dot'; lbl.textContent = '—'; return; }
+    if (!name) { dot.className = 'status-dot'; lbl.textContent = '—'; this.updateConnCard(false, ''); return; }
     if (connected !== undefined) {
       dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
       lbl.textContent = connected ? 'Conectado' : 'Desconectado';
+      this.updateConnCard(connected, '');
     }
     const saved = localStorage.getItem(`token:${name}`);
     document.getElementById('instance-token').value = saved || '';
+    // Auto-check status se token já salvo
+    if (saved) setTimeout(() => this.checkStatus(true), 300);
+  },
+
+  updateConnCard(connected, phone) {
+    const badge = document.getElementById('conn-badge');
+    const phoneEl = document.getElementById('conn-phone-num');
+    const discoActions = document.getElementById('conn-disconnected-actions');
+    const connActions = document.getElementById('conn-connected-actions');
+    const dot = document.getElementById('instance-dot');
+    const lbl = document.getElementById('instance-status-label');
+
+    if (connected) {
+      badge.className = 'conn-badge connected'; badge.textContent = '● Conectado';
+      dot.className = 'status-dot connected'; lbl.textContent = 'Conectado';
+      if (phone) { phoneEl.textContent = '📱 ' + phone; phoneEl.classList.remove('hidden'); }
+      else phoneEl.classList.add('hidden');
+      discoActions.classList.add('hidden');
+      connActions.classList.remove('hidden');
+    } else {
+      badge.className = 'conn-badge disconnected'; badge.textContent = '● Desconectado';
+      dot.className = 'status-dot disconnected'; lbl.textContent = 'Desconectado';
+      phoneEl.classList.add('hidden');
+      discoActions.classList.remove('hidden');
+      connActions.classList.add('hidden');
+    }
+  },
+
+  _extractPhone(data) {
+    // Tenta vários campos que a Evolution Go pode retornar
+    const jid = data?.data?.ownerJid || data?.data?.myJid || data?.instance?.ownerJid || '';
+    return jid.replace(/@.+/, '').replace(/\D/g,'');
   },
 
   saveToken() {
@@ -1242,48 +1340,59 @@ const Instances = {
     if (!name || !token) return;
     localStorage.setItem(`token:${name}`, token);
     UI.flashBtn(document.getElementById('btn-save-token'), '✓');
+    setTimeout(() => this.checkStatus(true), 200);
   },
 
   getToken() {
     return document.getElementById('instance-token').value.trim();
   },
 
-  async checkStatus() {
+  async checkStatus(silent) {
     const token = this.getToken();
-    if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
-    const dot = document.getElementById('instance-dot');
-    const lbl = document.getElementById('instance-status-label');
-    dot.className = 'status-dot loading'; lbl.textContent = 'Verificando...';
+    if (!token) { if (!silent) UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
+    const badge = document.getElementById('conn-badge');
+    badge.className = 'conn-badge checking'; badge.textContent = '● Verificando...';
     try {
       const data = await API.getStatus(token);
-      const connected = data?.data?.connected || data?.data?.loggedIn;
-      dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-      lbl.textContent = connected ? 'Conectado' : 'Desconectado';
-      if (connected) {
-        const jid = data?.data?.myJid || '';
-        UI.addBanner('info', `✓ Instância conectada${jid ? ' — ' + jid : ''}.`);
-      } else {
-        UI.addBanner('warning', '⚠ Instância não está conectada. Use os botões abaixo para conectar.');
+      const connected = data?.data?.connected || data?.data?.loggedIn ||
+                        data?.instance?.state === 'open' || data?.state === 'open';
+      const phone = this._extractPhone(data);
+      this.updateConnCard(connected, phone);
+      if (!silent) {
+        if (connected) UI.addBanner('info', `✓ Conectado${phone ? ' — ' + phone : ''}`);
+        else UI.addBanner('warning', '⚠ Não conectado. Use os botões abaixo para conectar.');
       }
+      return connected;
     } catch (err) {
-      dot.className = 'status-dot disconnected'; lbl.textContent = 'Erro';
-      UI.addBanner('error', `Erro ao verificar status: ${err.message}`);
+      badge.className = 'conn-badge disconnected'; badge.textContent = '● Erro';
+      if (!silent) UI.addBanner('error', `Erro ao verificar: ${err.message}`);
+      return false;
     }
+  },
+
+  _startConnPoll() {
+    // Verifica conexão a cada 4s enquanto o modal estiver aberto
+    clearInterval(AppState.connPollTimer);
+    AppState.connPollTimer = setInterval(async () => {
+      const modal = document.getElementById('modal-connect');
+      if (modal.classList.contains('hidden')) { clearInterval(AppState.connPollTimer); return; }
+      const connected = await this.checkStatus(true);
+      if (connected) {
+        clearInterval(AppState.connPollTimer);
+        clearInterval(AppState.qrTimer);
+        modal.classList.add('hidden');
+        UI.addBanner('info', '✅ WhatsApp conectado com sucesso!');
+      }
+    }, 4000);
   },
 
   async showQR() {
     const token = this.getToken();
     if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
-
-    // Inicia conexão antes de pegar o QR
     await API.connectInstance(token, '');
-
     const data = await API.getQR(token);
     const code = data?.data?.code;
-    if (!code) {
-      UI.addBanner('error', 'Não foi possível gerar o QR Code. Verifique se o token é válido e tente novamente.');
-      return;
-    }
+    if (!code) { UI.addBanner('error', 'Não foi possível gerar o QR Code. Verifique o token e tente novamente.'); return; }
 
     document.getElementById('qr-img').src = code;
     document.getElementById('modal-qr-section').classList.remove('hidden');
@@ -1292,18 +1401,16 @@ const Instances = {
     document.getElementById('modal-sub').textContent = 'Abra o WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie o QR';
     document.getElementById('modal-connect').classList.remove('hidden');
 
-    // Countdown timer
     clearInterval(AppState.qrTimer);
     AppState.qrCountdown = 60;
     document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
     AppState.qrTimer = setInterval(() => {
       AppState.qrCountdown--;
       document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
-      if (AppState.qrCountdown <= 0) {
-        clearInterval(AppState.qrTimer);
-        document.getElementById('qr-countdown').textContent = 'expirado';
-      }
+      if (AppState.qrCountdown <= 0) { clearInterval(AppState.qrTimer); document.getElementById('qr-countdown').textContent = 'expirado'; }
     }, 1000);
+
+    this._startConnPoll();
   },
 
   async refreshQR() {
@@ -1332,10 +1439,7 @@ const Instances = {
 
     const data = await API.pairCode(token, phone);
     const code = data?.data?.code;
-    if (!code) {
-      UI.addBanner('error', 'Não foi possível gerar o código de pareamento. Verifique o token e tente novamente.');
-      return;
-    }
+    if (!code) { UI.addBanner('error', 'Não foi possível gerar o código. Verifique o token e tente novamente.'); return; }
 
     document.getElementById('pair-code-display').textContent = code;
     document.getElementById('modal-qr-section').classList.add('hidden');
@@ -1343,6 +1447,28 @@ const Instances = {
     document.getElementById('modal-title').textContent = 'Conectar via Código';
     document.getElementById('modal-sub').textContent = '';
     document.getElementById('modal-connect').classList.remove('hidden');
+    this._startConnPoll();
+  },
+
+  async logout() {
+    const token = this.getToken();
+    if (!token) return;
+    try {
+      await fetch('/api/instance/logout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ instanceToken: token }) });
+      this.updateConnCard(false, '');
+      UI.addBanner('info', 'Instância desconectada.');
+    } catch (err) { UI.addBanner('error', `Erro ao desconectar: ${err.message}`); }
+  },
+
+  async restart() {
+    const token = this.getToken();
+    if (!token) return;
+    const badge = document.getElementById('conn-badge');
+    badge.className = 'conn-badge checking'; badge.textContent = '● Reconectando...';
+    try {
+      await fetch('/api/instance/restart', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ instanceToken: token }) });
+      setTimeout(() => this.checkStatus(false), 3000);
+    } catch (err) { UI.addBanner('error', `Erro ao reconectar: ${err.message}`); }
   }
 };
 
@@ -1857,14 +1983,16 @@ function init() {
     inp.type = inp.type === 'password' ? 'text' : 'password';
   };
 
-  // Connect buttons
+  // Connect / disconnect buttons
   document.getElementById('btn-show-qr').onclick = () => Instances.showQR();
   document.getElementById('btn-show-pair').onclick = () => {
     const s = document.getElementById('pair-input-section');
     s.classList.toggle('hidden');
   };
-  document.getElementById('btn-check-status').onclick = () => Instances.checkStatus();
+  document.getElementById('btn-check-status').onclick = () => Instances.checkStatus(false);
   document.getElementById('btn-request-pair').onclick = () => Instances.requestPairCode();
+  document.getElementById('btn-disconnect').onclick = () => Instances.logout();
+  document.getElementById('btn-restart-inst').onclick = () => Instances.restart();
 
   // Modal
   document.getElementById('btn-modal-close').onclick = () => {
@@ -1903,10 +2031,63 @@ function init() {
   document.getElementById('btn-cancel-excel').onclick = () => Excel.cancel();
 
   // Message
+  // ── WA Preview live update ───────────────────────────────
+  function updateWAPreview() {
+    const raw = document.getElementById('main-message').value;
+    const sampleName = AppState.contacts.length > 0
+      ? AppState.contacts[0].name
+      : 'Maria';
+    const text = raw.replace(/\{nome\}/g, sampleName) || 'Digite sua mensagem acima...';
+
+    // Update contact name + avatar letter
+    document.getElementById('wa-contact-name').textContent = sampleName;
+    document.getElementById('wa-avatar-letter').textContent = sampleName.charAt(0).toUpperCase();
+
+    // Update time to current
+    const now = new Date();
+    document.getElementById('wa-time').textContent =
+      now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Build bubble content
+    const bubble = document.getElementById('wa-bubble');
+    const waText = document.getElementById('wa-text');
+
+    // Remove existing media placeholder if any
+    const existing = bubble.querySelector('.wa-media-placeholder');
+    if (existing) existing.remove();
+
+    waText.textContent = text;
+
+    // Add media placeholder if media active
+    const mediaOn = document.getElementById('toggle-media').checked;
+    const activeMedia = AppState.mediaItems.filter(m =>
+      (m.mode === 'url' && m.url && m.url.trim()) ||
+      (m.mode === 'upload' && m.base64)
+    );
+    if (mediaOn && activeMedia.length > 0) {
+      const icons = { image:'🖼️', video:'🎬', audio:'🎤', document:'📄' };
+      activeMedia.slice(0, 2).forEach(item => {
+        const ph = document.createElement('div');
+        ph.className = 'wa-media-placeholder';
+        const typeLabel = item.ptt ? 'Áudio (PTT)' : (item.origName || item.type);
+        ph.innerHTML = `<span style="font-size:22px">${icons[item.type]||'📎'}</span><span>${typeLabel}</span>`;
+        bubble.insertBefore(ph, bubble.querySelector('.wa-text'));
+      });
+    }
+
+    // Date pill
+    document.getElementById('wa-date-pill').textContent =
+      now.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
+  }
+
   document.getElementById('main-message').addEventListener('input', e => {
     document.getElementById('main-char-count').textContent = `${e.target.value.length} caracteres`;
+    updateWAPreview();
   });
-  document.getElementById('btn-preview').onclick = () => Message.preview();
+  document.getElementById('toggle-media').addEventListener('change', updateWAPreview);
+  updateWAPreview();
+
+  document.getElementById('btn-preview') && document.getElementById('btn-preview').addEventListener && (document.getElementById('btn-preview').onclick = () => {});
   document.getElementById('toggle-variations').onchange = e => Message.onToggle(e.target.checked);
   document.getElementById('btn-add-variation').onclick = () => Message.addVariation();
 

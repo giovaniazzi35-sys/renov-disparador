@@ -298,6 +298,28 @@ app.post('/api/send/media-upload', requireAuth, async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
+app.post('/api/instance/logout', requireAuth, async (req, res) => {
+  const { instanceToken } = req.body;
+  if (!instanceToken) return res.status(400).json({ error: 'instanceToken obrigatório.' });
+  try {
+    const up = await proxyFetch(`${EVOLUTION_URL}/instance/logout`, {
+      method: 'DELETE', headers: { apikey: instanceToken },
+    });
+    res.status(up.status).json(await up.json());
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+app.post('/api/instance/restart', requireAuth, async (req, res) => {
+  const { instanceToken } = req.body;
+  if (!instanceToken) return res.status(400).json({ error: 'instanceToken obrigatório.' });
+  try {
+    const up = await proxyFetch(`${EVOLUTION_URL}/instance/restart`, {
+      method: 'PUT', headers: { apikey: instanceToken },
+    });
+    res.status(up.status).json(await up.json());
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 app.post('/api/user/check', requireAuth, async (req, res) => {
   const { instanceToken, number } = req.body;
   if (!instanceToken || !number) return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
