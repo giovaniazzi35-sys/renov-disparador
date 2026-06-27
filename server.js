@@ -16,6 +16,7 @@ const PORT           = parseInt(process.env.PORT) || 3000;
 const EVOLUTION_URL  = (process.env.EVOLUTION_URL || '').replace(/\/$/, '');
 const GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'renov-secret-2026';
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
 
 if (!EVOLUTION_URL || EVOLUTION_URL === 'https://SEU_IP_OU_DOMINIO') {
   console.error('\n  ❌  EVOLUTION_URL não configurada! Edite o arquivo .env.\n');
@@ -330,6 +331,121 @@ app.post('/api/user/check', requireAuth, async (req, res) => {
     });
     res.status(up.status).json(await up.json());
   } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// ── Agente IA ────────────────────────────────────────────────
+
+const AGENT_FILE = path.join(__dirname, 'agent-config.json');
+
+function loadAgentConfig() {
+  if (process.env.AGENT_CONFIG_JSON) {
+    try { return JSON.parse(process.env.AGENT_CONFIG_JSON); } catch (_) {}
+  }
+  if (fs.existsSync(AGENT_FILE)) {
+    try { return JSON.parse(fs.readFileSync(AGENT_FILE, 'utf8')); } catch (_) {}
+  }
+  return { active: false, instanceName: '', instanceToken: '', prompt: '', docText: '' };
+}
+
+function saveAgentConfig(cfg) {
+  try { fs.writeFileSync(AGENT_FILE, JSON.stringify(cfg, null, 2)); } catch (_) {}
+}
+
+let agentConfig = loadAgentConfig();
+
+async function callClaude(userMessage) {
+  if (!CLAUDE_API_KEY) throw new Error('CLAUDE_API_KEY não configurada');
+  const system = [
+    agentConfig.prompt,
+    agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''
+  ].join('').trim();
+
+  const body = JSON.stringify({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 400,
+    system: system || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.',
+    messages: [{ role: 'user', content: userMessage }],
+  });
+
+  const r = await proxyFetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body,
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error?.message || `Claude API ${r.status}`);
+  return data?.content?.[0]?.text || '';
+}
+
+function extractMsgText(data) {
+  const m = data?.message || {};
+  return m.conversation
+      || m.extendedTextMessage?.text
+      || m.ephemeralMessage?.message?.extendedTextMessage?.text
+      || m.ephemeralMessage?.message?.conversation
+      || m.buttonsResponseMessage?.selectedDisplayText
+      || m.listResponseMessage?.title
+      || '';
+}
+
+app.get('/api/agent/config', requireAuth, (req, res) => {
+  res.json({ ok: true, data: { ...agentConfig, docText: agentConfig.docText ? '(carregado)' : '' } });
+});
+
+app.post('/api/agent/config', requireAuth, (req, res) => {
+  const { active, instanceName, instanceToken, prompt, docText } = req.body;
+  agentConfig = { active: !!active, instanceName: instanceName || '', instanceToken: instanceToken || '', prompt: prompt || '', docText: docText || '' };
+  saveAgentConfig(agentConfig);
+  logReq('POST', '/api/agent/config', `active=${agentConfig.active} instance=${agentConfig.instanceName}`);
+  res.json({ ok: true });
+});
+
+app.post('/api/agent/toggle', requireAuth, (req, res) => {
+  agentConfig.active = !agentConfig.active;
+  saveAgentConfig(agentConfig);
+  logReq('POST', '/api/agent/toggle', `active=${agentConfig.active}`);
+  res.json({ ok: true, active: agentConfig.active });
+});
+
+// Webhook público — Evolution Go posta aqui sem autenticação
+app.post('/api/agent/webhook', async (req, res) => {
+  res.status(200).json({ ok: true }); // responde imediatamente
+  try {
+    if (!agentConfig.active || !agentConfig.instanceToken) return;
+    const event = req.body?.event || req.body?.type || '';
+    if (!event.toLowerCase().includes('message')) return;
+
+    const msgData = req.body?.data || req.body?.messages?.[0] || req.body;
+    if (!msgData) return;
+    if (msgData?.key?.fromMe) return; // ignora mensagens próprias
+    const isGroup = (msgData?.key?.remoteJid || '').includes('@g.us');
+    if (isGroup) return;
+
+    const text = extractMsgText(msgData).trim();
+    if (!text) return;
+
+    const from = (msgData?.key?.remoteJid || '').replace('@s.whatsapp.net', '');
+    if (!from) return;
+
+    const ts = new Date().toTimeString().slice(0, 8);
+    console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 60)}`);
+
+    const reply = await callClaude(text);
+    if (!reply) return;
+
+    await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+      method: 'POST',
+      headers: { apikey: agentConfig.instanceToken },
+      body: JSON.stringify({ number: from, text: reply, delay: 1500 }),
+    });
+    console.log(`[${ts}] 🤖 Agente respondeu para ${from}: ${reply.slice(0, 60)}`);
+  } catch (err) {
+    console.error('Agente IA erro:', err.message);
+  }
 });
 
 // ── Inicia servidor (apenas localmente — Vercel usa module.exports) ──
