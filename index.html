@@ -705,18 +705,6 @@
         <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
       </div>
 
-      <!-- elementos ocultos para manter compatibilidade com JS existente -->
-      <div class="hidden" id="conn-disconnected-actions">
-        <div id="pair-input-section"><input type="text" id="pair-phone" /><button id="btn-request-pair"></button></div>
-      </div>
-      <div class="hidden" id="conn-connected-actions"></div>
-      <span class="hidden" id="conn-badge"></span>
-      <span class="hidden" id="conn-phone-num"></span>
-      <button class="hidden" id="btn-show-qr"></button>
-      <button class="hidden" id="btn-show-pair"></button>
-      <button class="hidden" id="btn-check-status"></button>
-      <button class="hidden" id="btn-disconnect"></button>
-      <button class="hidden" id="btn-restart-inst"></button>
 
     </div>
 
@@ -1287,27 +1275,10 @@ const Instances = {
   },
 
   updateConnCard(connected, phone) {
-    const badge = document.getElementById('conn-badge');
-    const phoneEl = document.getElementById('conn-phone-num');
-    const discoActions = document.getElementById('conn-disconnected-actions');
-    const connActions = document.getElementById('conn-connected-actions');
     const dot = document.getElementById('instance-dot');
     const lbl = document.getElementById('instance-status-label');
-
-    if (connected) {
-      badge.className = 'conn-badge connected'; badge.textContent = '● Conectado';
-      dot.className = 'status-dot connected'; lbl.textContent = 'Conectado';
-      if (phone) { phoneEl.textContent = '📱 ' + phone; phoneEl.classList.remove('hidden'); }
-      else phoneEl.classList.add('hidden');
-      discoActions.classList.add('hidden');
-      connActions.classList.remove('hidden');
-    } else {
-      badge.className = 'conn-badge disconnected'; badge.textContent = '● Desconectado';
-      dot.className = 'status-dot disconnected'; lbl.textContent = 'Desconectado';
-      phoneEl.classList.add('hidden');
-      discoActions.classList.remove('hidden');
-      connActions.classList.add('hidden');
-    }
+    if (dot) { dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected'); }
+    if (lbl) { lbl.textContent = connected ? 'Conectado' : 'Desconectado'; }
   },
 
   _extractPhone(data) {
@@ -1965,16 +1936,14 @@ function init() {
     inp.type = inp.type === 'password' ? 'text' : 'password';
   };
 
-  // Connect / disconnect buttons
-  document.getElementById('btn-show-qr').onclick = () => Instances.showQR();
-  document.getElementById('btn-show-pair').onclick = () => {
-    const s = document.getElementById('pair-input-section');
-    s.classList.toggle('hidden');
-  };
-  document.getElementById('btn-check-status').onclick = () => Instances.checkStatus(false);
-  document.getElementById('btn-request-pair').onclick = () => Instances.requestPairCode();
-  document.getElementById('btn-disconnect').onclick = () => Instances.logout();
-  document.getElementById('btn-restart-inst').onclick = () => Instances.restart();
+  // Connect / disconnect buttons (removidos do layout — guards para não quebrar)
+  const _wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  _wire('btn-show-qr', () => Instances.showQR());
+  _wire('btn-show-pair', () => { const s = document.getElementById('pair-input-section'); if (s) s.classList.toggle('hidden'); });
+  _wire('btn-check-status', () => Instances.checkStatus(false));
+  _wire('btn-request-pair', () => Instances.requestPairCode());
+  _wire('btn-disconnect', () => Instances.logout());
+  _wire('btn-restart-inst', () => Instances.restart());
 
   // Modal
   document.getElementById('btn-modal-close').onclick = () => {
