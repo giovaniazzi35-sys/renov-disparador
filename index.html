@@ -433,6 +433,26 @@
     .ptt-badge { display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:3px 9px;font-size:10px;color:#4ade80;margin-top:6px; }
     .btn-add-media { display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);border:1.5px dashed var(--border);background:transparent;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;width:100%;justify-content:center;margin-top:4px; }
     .btn-add-media:hover { border-color:var(--accent);color:var(--accent); }
+    /* ── Delay presets ── */
+    .delay-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px; }
+    .delay-preset { border:1.5px solid var(--border); background:var(--bg); color:var(--text-2); border-radius:var(--radius-sm); padding:12px 4px; text-align:center; cursor:pointer; font-size:12px; font-weight:700; transition:all .15s; display:flex; flex-direction:column; align-items:center; gap:4px; }
+    .delay-preset small { font-weight:400; font-size:10px; color:var(--text-3); display:block; }
+    .delay-preset:hover { border-color:var(--accent); color:var(--text); }
+    .delay-preset.active { border-color:var(--accent); background:var(--accent-glow); color:var(--accent); }
+    .delay-preset.active small { color:var(--accent); opacity:.7; }
+    .time-picker { display:flex; align-items:center; gap:8px; }
+    .time-picker input[type=number] { width:64px; background:#0f1117; border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:22px; font-weight:700; padding:10px 8px; text-align:center; outline:none; transition:border-color .15s; -moz-appearance:textfield; }
+    .time-picker input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; }
+    .time-picker input[type=number]:focus { border-color:var(--accent); }
+    .tp-sep { font-size:22px; font-weight:700; color:var(--text-3); }
+    .tp-label { font-size:11px; color:var(--text-2); font-weight:600; }
+    .delay-rate-box { display:flex; align-items:center; gap:10px; padding:12px 16px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.15); border-radius:var(--radius-sm); font-size:13px; margin-top:16px; }
+    /* ── Último contato ── */
+    .last-contact-box { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.2); border-radius:var(--radius-sm); font-size:12px; margin-top:8px; flex-wrap:wrap; }
+    .lc-label { color:var(--text-3); font-size:11px; white-space:nowrap; }
+    .lc-name { font-weight:700; color:var(--text); }
+    .lc-phone { color:var(--text-2); font-family:monospace; font-size:11px; }
+    .lc-time { color:var(--text-3); font-size:11px; margin-left:auto; white-space:nowrap; }
     /* ── Playbook ── */
     .playbook-dropdown { position:relative; display:inline-block; }
     .btn-playbook { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s; }
@@ -640,6 +660,13 @@
           </span>
           <button class="btn-ghost btn-sm" id="btn-load-instances">↺ Carregar</button>
         </div>
+        <!-- Último contato disparado nesta instância -->
+        <div class="last-contact-box hidden" id="last-contact-box">
+          <span class="lc-label">📍 Último disparo:</span>
+          <span class="lc-name" id="lc-name">—</span>
+          <span class="lc-phone" id="lc-phone">—</span>
+          <span class="lc-time" id="lc-time">—</span>
+        </div>
       </div>
 
       <div class="field">
@@ -842,27 +869,53 @@
   <div class="step-panel" data-panel="4">
     <div class="card">
       <div class="card-title">Qual o intervalo entre os envios?</div>
-      <div class="card-sub">O sistema aguardará um tempo aleatório entre cada mensagem enviada, respeitando os limites definidos abaixo.</div>
+      <div class="card-sub">Defina o tempo de espera entre cada mensagem. O sistema usa valores aleatórios dentro do intervalo configurado — quanto mais lento, menor o risco de banimento.</div>
 
+      <!-- Presets -->
+      <div class="delay-presets">
+        <button class="delay-preset" data-min="5" data-max="15">⚡ Rápido<small>5 – 15 seg</small></button>
+        <button class="delay-preset active" data-min="30" data-max="60">✅ Médio<small>30 seg – 1 min</small></button>
+        <button class="delay-preset" data-min="90" data-max="180">🐢 Lento<small>1,5 – 3 min</small></button>
+        <button class="delay-preset" data-min="180" data-max="300">🛡️ Cauteloso<small>3 – 5 min</small></button>
+      </div>
+
+      <!-- Pickers min / max -->
       <div class="grid-2">
         <div class="field">
-          <label class="field-label">Tempo mínimo (segundos)</label>
-          <input type="number" id="delay-min" value="5" min="1" max="3600" />
+          <label class="field-label">Tempo mínimo</label>
+          <div class="time-picker">
+            <input type="number" id="dmin-m" value="0" min="0" max="59" />
+            <span class="tp-label">min</span>
+            <span class="tp-sep">:</span>
+            <input type="number" id="dmin-s" value="30" min="0" max="59" />
+            <span class="tp-label">seg</span>
+          </div>
         </div>
         <div class="field">
-          <label class="field-label">Tempo máximo (segundos)</label>
-          <input type="number" id="delay-max" value="15" min="1" max="3600" />
+          <label class="field-label">Tempo máximo</label>
+          <div class="time-picker">
+            <input type="number" id="dmax-m" value="1" min="0" max="59" />
+            <span class="tp-label">min</span>
+            <span class="tp-sep">:</span>
+            <input type="number" id="dmax-s" value="0" min="0" max="59" />
+            <span class="tp-label">seg</span>
+          </div>
         </div>
       </div>
 
-      <div class="delay-visual" id="delay-visual">
-        ⏱ Aguardará entre <span class="dhl" id="dv-min">5s</span> e <span class="dhl" id="dv-max">15s</span> entre cada envio
+      <!-- Estimativa de taxa -->
+      <div class="delay-rate-box" id="delay-visual">
+        ⏱ Intervalo: <span class="dhl" id="dv-range">30s – 1min</span> &nbsp;·&nbsp; Estimativa: <span class="dhl" id="dv-rate">60</span> mensagens/hora
       </div>
 
       <div class="banner warning hidden mt-12" id="delay-warn">
         <span>⚠</span>
-        <span>Intervalos muito curtos aumentam o risco de banimento do número pelo WhatsApp. Recomendamos mínimo de 5 segundos.</span>
+        <span>Intervalo muito curto — risco elevado de banimento. Recomendamos mínimo de 15 segundos.</span>
       </div>
+
+      <!-- hidden inputs para compatibilidade -->
+      <input type="hidden" id="delay-min" value="30" />
+      <input type="hidden" id="delay-max" value="60" />
 
       <div class="inline-err hidden mt-12" id="step4-error"></div>
     </div>
@@ -1131,7 +1184,7 @@ const Stepper = {
     document.getElementById('pre-contacts').textContent = `${AppState.contacts.length} contatos`;
     const minV = document.getElementById('delay-min').value;
     const maxV = document.getElementById('delay-max').value;
-    document.getElementById('pre-delay').textContent = `${minV}s – ${maxV}s`;
+    document.getElementById('pre-delay').textContent = `${Delay._fmt(parseInt(minV)||0)} – ${Delay._fmt(parseInt(maxV)||0)}`;
     const mediaOn = document.getElementById('toggle-media').checked;
     const activeCount = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url'&&m.url.trim())||(m.mode==='upload'&&m.base64)).length : 0;
     document.getElementById('pre-media').textContent = activeCount ? `${activeCount} arquivo(s)` : 'Nenhuma';
@@ -1458,18 +1511,45 @@ const Delay = {
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
   getRandom(minMs, maxMs) { return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs; },
 
+  _getTotalSec() {
+    const minM = parseInt(document.getElementById('dmin-m').value) || 0;
+    const minS = parseInt(document.getElementById('dmin-s').value) || 0;
+    const maxM = parseInt(document.getElementById('dmax-m').value) || 0;
+    const maxS = parseInt(document.getElementById('dmax-s').value) || 0;
+    let min = minM * 60 + minS;
+    let max = maxM * 60 + maxS;
+    if (min < 1) min = 1;
+    if (max < min) max = min;
+    return { min, max };
+  },
+
+  _fmt(s) {
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60), r = s % 60;
+    return r ? `${m}min ${r}s` : `${m}min`;
+  },
+
   updateVisual() {
-    const min = parseInt(document.getElementById('delay-min').value) || 0;
-    const max = parseInt(document.getElementById('delay-max').value) || 0;
-    document.getElementById('dv-min').textContent = `${min}s`;
-    document.getElementById('dv-max').textContent = `${max}s`;
-    document.getElementById('delay-warn').classList.toggle('hidden', min >= 5);
+    const { min, max } = this._getTotalSec();
+    document.getElementById('dv-range').textContent = `${this._fmt(min)} – ${this._fmt(max)}`;
+    const avg = (min + max) / 2 || 1;
+    document.getElementById('dv-rate').textContent = Math.round(3600 / avg);
+    document.getElementById('delay-warn').classList.toggle('hidden', min >= 15);
+    // sync hidden inputs (usados por fillPreSummary)
+    document.getElementById('delay-min').value = min;
+    document.getElementById('delay-max').value = max;
+  },
+
+  setPreset(minSec, maxSec) {
+    document.getElementById('dmin-m').value = Math.floor(minSec / 60);
+    document.getElementById('dmin-s').value = minSec % 60;
+    document.getElementById('dmax-m').value = Math.floor(maxSec / 60);
+    document.getElementById('dmax-s').value = maxSec % 60;
+    this.updateVisual();
   },
 
   getValues() {
-    let min = parseInt(document.getElementById('delay-min').value) || 1;
-    let max = parseInt(document.getElementById('delay-max').value) || 1;
-    if (max < min) { document.getElementById('delay-max').value = min; max = min; }
+    const { min, max } = this._getTotalSec();
     return { minMs: min * 1000, maxMs: max * 1000 };
   }
 };
@@ -1582,7 +1662,14 @@ const Dispatch = {
         result = await API.sendText(token, contact.phone, text);
       }
 
-      result.ok ? (sent++, Log.append(contact, 'success')) : (errors++, Log.append(contact, 'error', result.errorMessage));
+      if (result.ok) {
+        sent++;
+        Log.append(contact, 'success');
+        if (window._saveLastContact) window._saveLastContact(token, contact);
+      } else {
+        errors++;
+        Log.append(contact, 'error', result.errorMessage);
+      }
       UI.updateProgress(i + 1, total);
 
       if (i < total - 1 && !AppState.stopRequested) {
@@ -1682,8 +1769,7 @@ const Validate = {
     return ok;
   },
   step4() {
-    const min = parseInt(document.getElementById('delay-min').value) || 0;
-    const max = parseInt(document.getElementById('delay-max').value) || 0;
+    const { min } = Delay._getTotalSec();
     const errEl = document.getElementById('step4-error');
     if (min < 1) { errEl.textContent = 'Tempo mínimo deve ser pelo menos 1 segundo.'; errEl.classList.remove('hidden'); return false; }
     if (max < min) { errEl.textContent = 'Tempo máximo deve ser maior ou igual ao mínimo.'; errEl.classList.remove('hidden'); return false; }
@@ -1704,13 +1790,66 @@ function init() {
   UI.renderContacts();
   Delay.updateVisual();
 
+  // Delay presets
+  document.querySelectorAll('.delay-preset').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.delay-preset').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      Delay.setPreset(parseInt(btn.dataset.min), parseInt(btn.dataset.max));
+    };
+  });
+  // Time pickers — atualiza visual ao digitar e desmarca preset
+  ['dmin-m','dmin-s','dmax-m','dmax-s'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+      document.querySelectorAll('.delay-preset').forEach(b => b.classList.remove('active'));
+      Delay.updateVisual();
+    });
+  });
+
+  // ── Último contato por instância ──────────────────────────
+  function lcKey(token) { return 'lc_' + token.slice(0, 24); }
+
+  function saveLastContact(token, contact) {
+    try {
+      localStorage.setItem(lcKey(token), JSON.stringify({
+        name: contact.name, phone: contact.phone,
+        ts: new Date().toISOString()
+      }));
+    } catch (_) {}
+  }
+
+  function showLastContact(token) {
+    const box = document.getElementById('last-contact-box');
+    try {
+      const data = JSON.parse(localStorage.getItem(lcKey(token)) || 'null');
+      if (!data) { box.classList.add('hidden'); return; }
+      const d = new Date(data.ts);
+      const fmt = `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+      document.getElementById('lc-name').textContent = data.name || '(sem nome)';
+      document.getElementById('lc-phone').textContent = data.phone;
+      document.getElementById('lc-time').textContent = fmt;
+      box.classList.remove('hidden');
+    } catch (_) { box.classList.add('hidden'); }
+  }
+
+  // Expõe para uso no dispatch loop
+  window._saveLastContact = saveLastContact;
+
   // Instance
   document.getElementById('btn-load-instances').onclick = () => Instances.load();
   document.getElementById('instance-select').addEventListener('change', e => {
     const opt = e.target.options[e.target.selectedIndex];
     Instances.onSelect(e.target.value, opt.dataset.connected === '1');
+    // Mostra último contato desta instância
+    const token = document.getElementById('instance-token').value.trim();
+    if (token) showLastContact(token);
+    else document.getElementById('last-contact-box').classList.add('hidden');
   });
-  document.getElementById('btn-save-token').onclick = () => Instances.saveToken();
+  document.getElementById('btn-save-token').onclick = () => {
+    Instances.saveToken();
+    const token = document.getElementById('instance-token').value.trim();
+    if (token) showLastContact(token);
+  };
   document.getElementById('btn-toggle-token-vis').onclick = () => {
     const inp = document.getElementById('instance-token');
     inp.type = inp.type === 'password' ? 'text' : 'password';
