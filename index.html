@@ -2088,7 +2088,12 @@ function init() {
   document.getElementById('toggle-media').addEventListener('change', updateWAPreview);
   updateWAPreview();
 
-  document.getElementById('btn-preview') && document.getElementById('btn-preview').addEventListener && (document.getElementById('btn-preview').onclick = () => {});
+  document.getElementById('btn-preview').onclick = () => {
+    const wrap = document.getElementById('wa-preview-wrap');
+    const hidden = wrap.classList.toggle('hidden');
+    document.getElementById('btn-preview').textContent = hidden ? '👁 Pré-visualizar' : '👁 Ocultar preview';
+    if (!hidden) updateWAPreview();
+  };
   document.getElementById('toggle-variations').onchange = e => Message.onToggle(e.target.checked);
   document.getElementById('btn-add-variation').onclick = () => Message.addVariation();
 
