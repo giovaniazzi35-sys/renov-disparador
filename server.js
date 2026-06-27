@@ -45,8 +45,8 @@ if (!USERS.length) {
 }
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '60mb' }));
+app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
 // cookie-session funciona em serverless (sem estado no servidor)
 app.use(cookieSession({
@@ -150,6 +150,21 @@ function normalizeNumber(raw) {
   return n;
 }
 
+// ── Helpers de MIME / extensão ──────────────────────────────
+function guessMime(mediaType, filename) {
+  if (filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const map = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', gif:'image/gif',
+                  mp4:'video/mp4', mov:'video/quicktime', avi:'video/avi',
+                  mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', m4a:'audio/mp4', aac:'audio/aac',
+                  pdf:'application/pdf', doc:'application/msword',
+                  docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    if (map[ext]) return map[ext];
+  }
+  const defaults = { image:'image/jpeg', video:'video/mp4', audio:'audio/mpeg', document:'application/octet-stream' };
+  return defaults[mediaType] || 'application/octet-stream';
+}
+
 // ── Traduz códigos de erro da Evolution Go ───────────────────
 function translateEvolutionError(status, body) {
   if (status === 463) return 'Número sem WhatsApp';
@@ -240,6 +255,44 @@ app.post('/api/send/media', requireAuth, async (req, res) => {
       body: JSON.stringify({ number, url, type, caption, filename }),
     });
     const body = await up.json();
+    if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
+    res.status(up.status).json(body);
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// ── Envio de mídia via base64 (upload de arquivo) ───────────
+app.post('/api/send/media-upload', requireAuth, async (req, res) => {
+  const { instanceToken, mediaBase64, mediaType, mimetype, caption, filename, ptt } = req.body;
+  const number = normalizeNumber(req.body.number || '');
+  if (!instanceToken || !number || !mediaBase64) {
+    return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
+  }
+  logReq('POST', '/api/send/media-upload', number);
+  const base64Data = mediaBase64.replace(/^data:[^;]+;base64,/, '');
+  const resolvedMime = mimetype || guessMime(mediaType, filename);
+  try {
+    // Áudio PTT (gravação de voz)
+    if (ptt) {
+      const up = await proxyFetch(`${EVOLUTION_URL}/send/audio`, {
+        method: 'POST', headers: { apikey: instanceToken },
+        body: JSON.stringify({ number, audio: base64Data, encoding: true }),
+      });
+      const body = await up.json().catch(() => ({}));
+      if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
+      return res.status(up.status).json(body);
+    }
+    // Outros tipos de mídia
+    const up = await proxyFetch(`${EVOLUTION_URL}/send/media`, {
+      method: 'POST', headers: { apikey: instanceToken },
+      body: JSON.stringify({
+        number, type: mediaType,
+        media: base64Data,
+        mimetype: resolvedMime,
+        caption: caption || '',
+        filename: filename || `arquivo.${resolvedMime.split('/')[1] || 'bin'}`,
+      }),
+    });
+    const body = await up.json().catch(() => ({}));
     if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
     res.status(up.status).json(body);
   } catch (err) { res.status(502).json({ error: err.message }); }

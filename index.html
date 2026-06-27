@@ -399,6 +399,35 @@
     .media-type-btn:hover { border-color: var(--accent); color: var(--text); }
     .media-type-btn.active { border-color: var(--accent); background: var(--accent-glow); color: var(--accent); }
 
+    /* ── Upload de arquivo ── */
+    .media-source-tabs { display:flex; gap:8px; margin-bottom:14px; }
+    .media-tab { flex:1; padding:8px 0; border-radius:var(--radius-sm); border:1.5px solid var(--border); background:transparent; color:var(--text-2); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+    .media-tab.active { border-color:var(--accent); background:var(--accent-glow); color:var(--accent); }
+    .upload-zone { border:2px dashed var(--border); border-radius:var(--radius-sm); padding:22px 16px; text-align:center; cursor:pointer; transition:all 0.2s; position:relative; }
+    .upload-zone:hover,.upload-zone.drag-over { border-color:var(--accent); background:var(--accent-glow); }
+    .upload-zone input[type=file] { position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2; }
+    .upload-zone .uz-icon { font-size:26px; margin-bottom:6px; }
+    .upload-zone .uz-label { font-size:13px; color:var(--text-2); }
+    .upload-zone .uz-sub { font-size:11px; color:var(--text-3); margin-top:3px; }
+    .file-preview { display:flex; align-items:center; gap:10px; background:var(--card2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; margin-top:8px; }
+    .file-preview .fp-icon { font-size:20px; }
+    .file-preview .fp-info { flex:1; min-width:0; }
+    .file-preview .fp-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .file-preview .fp-size { font-size:11px; color:var(--text-3); }
+    .file-preview .fp-remove { background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px;padding:2px; }
+    .file-preview .fp-remove:hover { color:var(--red); }
+    .ptt-badge { display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);border-radius:20px;padding:4px 10px;font-size:11px;color:#4ade80;margin-top:8px; }
+    /* ── Playbook ── */
+    .playbook-dropdown { position:relative; display:inline-block; }
+    .btn-playbook { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s; }
+    .btn-playbook:hover { background:var(--accent-glow); }
+    .playbook-menu { position:absolute;top:calc(100% + 6px);left:0;z-index:200;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);min-width:340px;max-height:340px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+    .playbook-item { display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:12px;cursor:pointer; }
+    .playbook-item:hover { background:var(--card2); }
+    .playbook-item:last-child { border-bottom:none; }
+    .pi-title { font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px; }
+    .pi-preview { color:var(--text-2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+
     /* ── Dispatch ── */
     .dispatch-big-btn { width: 100%; justify-content: center; margin-bottom: 20px; }
     .progress-wrap { margin-bottom: 16px; }
@@ -735,7 +764,11 @@
         <div class="char-count" id="main-char-count">0 caracteres</div>
       </div>
 
-      <div class="row-end">
+      <div class="row-end" style="gap:8px">
+        <div class="playbook-dropdown" id="playbook-dropdown">
+          <button class="btn-playbook" id="btn-playbook">💡 Variações do Playbook</button>
+          <div class="playbook-menu hidden" id="playbook-menu"></div>
+        </div>
         <button class="btn-ghost btn-sm" id="btn-preview">👁 Pré-visualizar</button>
       </div>
 
@@ -778,14 +811,43 @@
           <div class="media-type-grid">
             <button class="media-type-btn active" data-mtype="image"><span class="mti">🖼️</span>Imagem</button>
             <button class="media-type-btn" data-mtype="video"><span class="mti">🎬</span>Vídeo</button>
-            <button class="media-type-btn" data-mtype="audio"><span class="mti">🎵</span>Áudio</button>
+            <button class="media-type-btn" data-mtype="audio"><span class="mti">🎤</span>Áudio</button>
             <button class="media-type-btn" data-mtype="document"><span class="mti">📄</span>Documento</button>
           </div>
-          <div class="field">
-            <label class="field-label">URL da mídia</label>
-            <input type="text" id="media-url" placeholder="https://exemplo.com/imagem.jpg" />
+
+          <div class="media-source-tabs">
+            <button class="media-tab active" id="tab-url">🔗 Enviar por URL</button>
+            <button class="media-tab" id="tab-upload">📁 Upload de arquivo</button>
           </div>
-          <div class="field" id="media-caption-field">
+
+          <!-- URL mode -->
+          <div id="media-url-mode">
+            <div class="field">
+              <label class="field-label">URL da mídia</label>
+              <input type="text" id="media-url" placeholder="https://exemplo.com/imagem.jpg" />
+            </div>
+          </div>
+
+          <!-- Upload mode -->
+          <div id="media-upload-mode" class="hidden">
+            <div class="upload-zone" id="upload-zone">
+              <input type="file" id="media-file-input" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,audio/mpeg,audio/ogg,audio/wav,audio/mp4,.enc" />
+              <div class="uz-icon">📎</div>
+              <div class="uz-label">Clique ou arraste o arquivo aqui</div>
+              <div class="uz-sub" id="upload-hint">JPG · PNG · MP4 — Imagem até 10 MB · Vídeo/Áudio até 50 MB</div>
+            </div>
+            <div class="file-preview hidden" id="file-preview">
+              <span class="fp-icon" id="fp-icon">📄</span>
+              <div class="fp-info">
+                <div class="fp-name" id="fp-name">arquivo</div>
+                <div class="fp-size" id="fp-size">0 KB</div>
+              </div>
+              <button class="fp-remove" id="fp-remove" title="Remover">✕</button>
+            </div>
+            <div class="ptt-badge hidden" id="ptt-badge">🎤 Enviado como áudio gravado na hora (PTT)</div>
+          </div>
+
+          <div class="field" id="media-caption-field" style="margin-top:12px">
             <label class="field-label">Legenda (opcional)</label>
             <input type="text" id="media-caption" placeholder="Descrição da mídia..." />
           </div>
@@ -944,6 +1006,11 @@ const AppState = {
   userScrolledLog: false,
   logCount: 0,
   mediaType: 'image',
+  mediaMode: 'url',    // 'url' | 'upload'
+  mediaBase64: null,
+  mediaMime: null,
+  mediaOrigName: null,
+  mediaPtt: false,
   qrTimer: null,
   qrCountdown: 60,
 };
@@ -962,6 +1029,20 @@ const Config = {
 // ============================================================
 // API
 // ============================================================
+// ── Variações do Playbook Comercial Renov ────────────────────
+const PLAYBOOK_MSGS = [
+  { title: '1 · Prova social direta',        text: 'Oi, {nome}! Tudo bem?\nSou da Renov Assessoria — trabalhamos com tráfego pago pra redes e franquias, já são mais de 70 cases com marcas como iFood, Coca-Cola e Grupo Carreira.\nQueria entender como vocês trabalham o marketing hoje.\nO comercial é com você mesmo ou tem outra pessoa que cuida disso?' },
+  { title: '2 · Curiosidade e contexto',      text: 'Oi, {nome}! Aqui é da Renov Assessoria.\nSomos especialistas em tráfego pago pra redes com múltiplas unidades — óticas, clínicas, franquias no geral.\nAntes de qualquer coisa, queria entender melhor o momento de vocês.\nVocê é a pessoa certa pra conversar sobre marketing e aquisição de clientes?' },
+  { title: '3 · Dor do segmento',             text: 'Oi, {nome}! Tudo certo?\nSou da Renov Assessoria. Ajudamos redes com múltiplas unidades a resolver um problema comum: investir em tráfego e não escalar porque a estratégia foi pensada pra loja única, não pra rede.\n70+ cases com iFood, Coca-Cola e redes de óticas e clínicas pelo Brasil.\nVocês já passaram por isso? E o comercial é com você?' },
+  { title: '4 · Humana e direta',             text: 'Oi, {nome}! Da Renov Assessoria.\nSem rodeios: tráfego pago focado em franquias e redes — 70+ cases, Coca-Cola, iFood e redes de saúde e varejo.\nNão vim oferecer nada agora — vim entender se faz sentido a gente trocar uma ideia.\nVocê cuida do comercial aí ou tem alguém responsável?' },
+  { title: '5 · Referência ao crescimento',   text: 'Oi, {nome}! Da Renov Assessoria.\nRedes em expansão são exatamente o perfil com quem mais trabalhamos.\nJá ajudamos iFood, Coca-Cola e Grupo Carreira a estruturar tráfego pago pra suportar o crescimento — 70+ cases.\nVocê é quem toca o comercial por aí ou tem outra pessoa?' },
+  { title: '6 · Foco em resultado / ROI',     text: 'Oi, {nome}! Tudo bem?\nSou da Renov Assessoria — 70+ cases com redes e franquias, iFood, Coca-Cola, Grupo Carreira — sempre focado em resultado: mais clientes, menor custo por aquisição.\nQueria entender como tá a operação de vocês hoje.\nO marketing é tocado por você mesmo?' },
+  { title: '7 · Tom consultivo',              text: 'Oi, {nome}! Da Renov Assessoria.\nNão vim vender nada. Vim entender.\nSomos especialistas em tráfego pago pra redes com múltiplas unidades. Antes de falar do que fazemos, quero entender o momento de vocês.\nVocê é o responsável pelo comercial e marketing?' },
+  { title: '8 · Autoridade + curiosidade',    text: 'Oi, {nome}! Da Renov Assessoria.\nJá rodamos campanhas pra Coca-Cola, iFood, Grupo Carreira e redes de óticas e clínicas — 70+ cases no portfólio.\nUma pergunta rápida: a empresa de vocês tem tráfego pago ativo hoje ou ainda tá no início disso?\nO comercial é com você?' },
+  { title: '9 · Escassez leve',               text: 'Oi, {nome}! Tudo bem?\nSou da Renov Assessoria — tráfego pago pra franquias e redes. 70+ cases, iFood, Coca-Cola e redes de saúde e varejo pelo Brasil.\nTodo mês abrimos poucas vagas pra novos clientes, justamente pra manter a qualidade.\nVocês estão num momento de expansão de marketing? Você que decide sobre isso?' },
+  { title: '10 · Ultra curto e direto',       text: 'Oi, {nome}! Da Renov Assessoria.\nTráfego pago pra redes e franquias — 70+ cases, iFood, Coca-Cola, Grupo Carreira.\nDuas perguntas rápidas:\n1) Vocês já investem em tráfego pago hoje?\n2) O comercial é com você mesmo?' },
+];
+
 const API = {
   async getAllInstances() {
     const res = await fetch('/api/instances');
@@ -1011,6 +1092,22 @@ const API = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceToken, number, text })
+      });
+      if (res.ok) return { ok: true };
+      let msg = `HTTP ${res.status}`;
+      try { const b = await res.json(); msg = b.error || b.message || msg; } catch (_) {}
+      return { ok: false, errorMessage: msg };
+    } catch (err) {
+      return { ok: false, errorMessage: err.message };
+    }
+  },
+
+  async sendMediaUpload(instanceToken, number, mediaBase64, mediaType, mimetype, caption, filename, ptt) {
+    try {
+      const res = await fetch('/api/send/media-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceToken, number, mediaBase64, mediaType, mimetype, caption, filename, ptt })
       });
       if (res.ok) return { ok: true };
       let msg = `HTTP ${res.status}`;
@@ -1071,7 +1168,12 @@ const Stepper = {
     document.getElementById('pre-delay').textContent = `${minV}s – ${maxV}s`;
     const mediaOn = document.getElementById('toggle-media').checked;
     const mediaUrl = document.getElementById('media-url').value.trim();
-    document.getElementById('pre-media').textContent = (mediaOn && mediaUrl) ? AppState.mediaType : 'Nenhuma';
+    let mediaLabel = 'Nenhuma';
+    if (mediaOn) {
+      if (AppState.mediaMode === 'upload' && AppState.mediaBase64) mediaLabel = AppState.mediaOrigName || AppState.mediaType;
+      else if (AppState.mediaMode === 'url' && mediaUrl) mediaLabel = AppState.mediaType;
+    }
+    document.getElementById('pre-media').textContent = mediaLabel;
   }
 };
 
@@ -1489,6 +1591,11 @@ const Dispatch = {
     const mediaCaption = document.getElementById('media-caption').value.trim();
     const mediaFilename = document.getElementById('media-filename').value.trim();
     const mediaType = AppState.mediaType;
+    const mediaMode = AppState.mediaMode;
+    const mediaBase64 = AppState.mediaBase64;
+    const mediaMime = AppState.mediaMime;
+    const mediaOrigName = AppState.mediaOrigName;
+    const mediaPtt = AppState.mediaPtt;
 
     document.getElementById('btn-start').classList.add('hidden');
     document.getElementById('btn-stop').classList.remove('hidden');
@@ -1506,12 +1613,12 @@ const Dispatch = {
       const text = Message.interpolate(Message.pickRandom(), contact);
       let result;
 
-      if (mediaOn && mediaUrl) {
+      if (mediaOn && mediaMode === 'upload' && mediaBase64) {
+        result = await API.sendMediaUpload(token, contact.phone, mediaBase64, mediaType, mediaMime, mediaCaption, mediaOrigName, mediaPtt);
+        if (!result.ok && text) result = await API.sendText(token, contact.phone, text);
+      } else if (mediaOn && mediaMode === 'url' && mediaUrl) {
         result = await API.sendMedia(token, contact.phone, mediaUrl, mediaType, mediaCaption, mediaFilename);
-        // Se a mídia falhar mas o texto tiver conteúdo, ainda tenta enviar o texto
-        if (!result.ok && text) {
-          result = await API.sendText(token, contact.phone, text);
-        }
+        if (!result.ok && text) result = await API.sendText(token, contact.phone, text);
       } else {
         result = await API.sendText(token, contact.phone, text);
       }
@@ -1707,16 +1814,112 @@ function init() {
   document.getElementById('toggle-media').onchange = e => {
     document.getElementById('media-panel').classList.toggle('hidden', !e.target.checked);
   };
+
+  // Media type buttons
   document.querySelectorAll('.media-type-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.media-type-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       AppState.mediaType = btn.dataset.mtype;
       const isDoc = AppState.mediaType === 'document';
+      const isAudio = AppState.mediaType === 'audio';
       document.getElementById('media-filename-field').classList.toggle('hidden', !isDoc);
       document.getElementById('media-caption-field').classList.toggle('hidden', isDoc);
+      // Atualiza accept do input de arquivo conforme tipo
+      const accepts = { image:'image/jpeg,image/png,image/gif,image/webp,.enc', video:'video/mp4,video/quicktime,video/avi', audio:'audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac', document:'application/pdf,.doc,.docx,application/octet-stream' };
+      document.getElementById('media-file-input').accept = accepts[AppState.mediaType] || '*/*';
+      // PTT badge
+      const pttBadge = document.getElementById('ptt-badge');
+      const isUpload = AppState.mediaMode === 'upload';
+      pttBadge.classList.toggle('hidden', !(isAudio && isUpload));
+      AppState.mediaPtt = isAudio && isUpload;
     };
   });
+
+  // Tabs URL / Upload
+  document.getElementById('tab-url').onclick = () => {
+    AppState.mediaMode = 'url';
+    document.getElementById('tab-url').classList.add('active');
+    document.getElementById('tab-upload').classList.remove('active');
+    document.getElementById('media-url-mode').classList.remove('hidden');
+    document.getElementById('media-upload-mode').classList.add('hidden');
+    AppState.mediaBase64 = null; AppState.mediaPtt = false;
+    document.getElementById('ptt-badge').classList.add('hidden');
+  };
+  document.getElementById('tab-upload').onclick = () => {
+    AppState.mediaMode = 'upload';
+    document.getElementById('tab-upload').classList.add('active');
+    document.getElementById('tab-url').classList.remove('active');
+    document.getElementById('media-url-mode').classList.add('hidden');
+    document.getElementById('media-upload-mode').classList.remove('hidden');
+    const isAudio = AppState.mediaType === 'audio';
+    AppState.mediaPtt = isAudio;
+    document.getElementById('ptt-badge').classList.toggle('hidden', !isAudio);
+  };
+
+  // Upload de arquivo
+  const fileInput = document.getElementById('media-file-input');
+  const uploadZone = document.getElementById('upload-zone');
+
+  function handleFile(file) {
+    if (!file) return;
+    const MB = file.size / 1024 / 1024;
+    const isImg = file.type.startsWith('image/');
+    const maxMB = isImg ? 10 : 50;
+    if (MB > maxMB) { alert(`Arquivo muito grande (${MB.toFixed(1)} MB). Limite: ${maxMB} MB.`); return; }
+    const icons = { image: '🖼️', video: '🎬', audio: '🎤', document: '📄' };
+    document.getElementById('fp-icon').textContent = icons[AppState.mediaType] || '📄';
+    document.getElementById('fp-name').textContent = file.name;
+    document.getElementById('fp-size').textContent = MB < 1 ? `${(file.size/1024).toFixed(0)} KB` : `${MB.toFixed(1)} MB`;
+    document.getElementById('file-preview').classList.remove('hidden');
+    uploadZone.classList.add('hidden');
+    AppState.mediaOrigName = file.name;
+    AppState.mediaMime = file.type;
+    const isAudio = AppState.mediaType === 'audio';
+    AppState.mediaPtt = isAudio;
+    document.getElementById('ptt-badge').classList.toggle('hidden', !isAudio);
+    const reader = new FileReader();
+    reader.onload = e => { AppState.mediaBase64 = e.target.result; };
+    reader.readAsDataURL(file);
+  }
+
+  fileInput.onchange = e => handleFile(e.target.files[0]);
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+
+  document.getElementById('fp-remove').onclick = () => {
+    AppState.mediaBase64 = null; AppState.mediaOrigName = null; AppState.mediaMime = null; AppState.mediaPtt = false;
+    fileInput.value = '';
+    document.getElementById('file-preview').classList.add('hidden');
+    document.getElementById('ptt-badge').classList.add('hidden');
+    uploadZone.classList.remove('hidden');
+  };
+
+  // Playbook dropdown
+  const playbookMenu = document.getElementById('playbook-menu');
+  PLAYBOOK_MSGS.forEach((m, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'playbook-item';
+    btn.innerHTML = `<div class="pi-title">${esc(m.title)}</div><div class="pi-preview">${esc(m.text.split('\n')[0])}</div>`;
+    btn.onclick = () => {
+      // Ativa variações e carrega todas as 10
+      document.getElementById('toggle-variations').checked = true;
+      Message.onToggle(true);
+      AppState.variations = PLAYBOOK_MSGS.map(x => x.text);
+      Message.renderVariations();
+      // Coloca a variação clicada também no campo principal
+      document.getElementById('main-message').value = m.text;
+      document.getElementById('main-char-count').textContent = `${m.text.length} caracteres`;
+      playbookMenu.classList.add('hidden');
+    };
+    playbookMenu.appendChild(btn);
+  });
+  document.getElementById('btn-playbook').onclick = e => {
+    e.stopPropagation();
+    playbookMenu.classList.toggle('hidden');
+  };
+  document.addEventListener('click', () => playbookMenu.classList.add('hidden'));
 
   // Delay
   ['delay-min','delay-max'].forEach(id => document.getElementById(id).addEventListener('input', () => Delay.updateVisual()));
