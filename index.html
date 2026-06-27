@@ -1655,6 +1655,45 @@ const Delay = {
 };
 
 // ============================================================
+// TRADUÇÃO DE ERROS → PT-BR
+// ============================================================
+function translateError(msg) {
+  if (!msg) return 'Erro desconhecido';
+  const m = String(msg).toLowerCase();
+
+  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network request failed'))
+    return 'Falha de conexão — verifique a internet ou o servidor';
+  if (m.includes('timeout') || m.includes('timed out') || m.includes('econnreset') || m.includes('econnrefused'))
+    return 'Tempo esgotado — instância pode estar desconectada';
+  if (m.includes('socket hang up') || m.includes('enotfound'))
+    return 'Servidor inacessível — verifique a URL da Evolution';
+
+  if (m.includes('invalid token') || m.includes('unauthorized') || m.includes('forbidden') || m.includes('apikey'))
+    return 'Token inválido ou sem permissão';
+  if (msg === 'HTTP 401') return 'Token inválido (401)';
+  if (msg === 'HTTP 403') return 'Sem permissão (403)';
+
+  if (m.includes('instance not found') || msg === 'HTTP 404')
+    return 'Instância não encontrada';
+  if (m.includes('no whatsapp') || m.includes('não tem whatsapp') || m.includes('463'))
+    return 'Número sem WhatsApp';
+  if (m.includes('not connected') || m.includes('disconnected'))
+    return 'Instância desconectada — reconecte o WhatsApp';
+  if (m.includes('invalid number') || m.includes('invalid phone'))
+    return 'Número inválido';
+  if (m.includes('rate') || m.includes('too many') || msg === 'HTTP 429')
+    return 'Muitos envios seguidos — aguarde e tente novamente';
+
+  if (msg === 'HTTP 400') return 'Requisição inválida (400)';
+  if (msg === 'HTTP 408' || msg === 'HTTP 504') return 'Tempo esgotado — instância pode estar desconectada';
+  if (msg === 'HTTP 500') return 'Erro interno no servidor da Evolution';
+  if (msg === 'HTTP 502' || msg === 'HTTP 503') return 'Servidor temporariamente indisponível';
+  if (/^HTTP \d{3}$/.test(msg)) return `Erro do servidor (${msg.split(' ')[1]})`;
+
+  return msg; // já em pt-br ou mensagem técnica desconhecida
+}
+
+// ============================================================
 // LOG
 // ============================================================
 const Log = {
@@ -1768,7 +1807,7 @@ const Dispatch = {
         if (window._saveLastContact) window._saveLastContact(token, contact);
       } else {
         errors++;
-        Log.append(contact, 'error', result.errorMessage);
+        Log.append(contact, 'error', translateError(result.errorMessage));
       }
       UI.updateProgress(i + 1, total);
 
