@@ -1107,7 +1107,21 @@ const API = {
       throw new Error(b.error || `HTTP ${res.status}`);
     }
     const body = await res.json();
-    return Array.isArray(body.data) ? body.data : [];
+    // Evolution Go pode retornar array direto ou { data: [...] }
+    const raw = Array.isArray(body) ? body
+              : Array.isArray(body.data) ? body.data
+              : [];
+    // Normaliza campos que variam entre versões da Evolution Go
+    return raw.map(inst => ({
+      ...inst,
+      name: inst.instanceName || inst.name || inst.id || '',
+      connected: inst.connected
+             || inst.connectionStatus === 'open'
+             || inst.state === 'open'
+             || inst.status === 'Connected'
+             || inst.status === 'CONNECTED'
+             || false,
+    }));
   },
 
   async connectInstance(instanceToken, webhookUrl) {
@@ -1307,8 +1321,13 @@ const Instances = {
     badge.className = 'conn-badge checking'; badge.textContent = '● Verificando...';
     try {
       const data = await API.getStatus(token);
-      const connected = data?.data?.connected || data?.data?.loggedIn ||
-                        data?.instance?.state === 'open' || data?.state === 'open';
+      const d = data?.data || data?.instance || data || {};
+      const connected = d.connected || d.loggedIn
+                     || d.connectionStatus === 'open'
+                     || d.state === 'open'
+                     || d.status === 'Connected'
+                     || d.status === 'CONNECTED'
+                     || false;
       const phone = this._extractPhone(data);
       this.updateConnCard(connected, phone);
       if (!silent) {
