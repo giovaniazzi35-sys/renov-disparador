@@ -332,25 +332,63 @@ app.post('/api/user/check', requireAuth, async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
-// ── Agente IA ────────────────────────────────────────────────
+// ── Agente IA — persistência Supabase ────────────────────────
 
-const AGENT_FILE = path.join(__dirname, 'agent-config.json');
+const AGENT_FILE    = path.join(__dirname, 'agent-config.json');
+const SUPABASE_URL  = (process.env.SUPABASE_URL  || '').replace(/\/$/, '');
+const SUPABASE_KEY  = process.env.SUPABASE_KEY  || '';
+const SB_HEADERS    = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
+const DEFAULT_CFG   = () => ({ active: false, instanceName: '', instanceToken: '', prompt: '', docText: '', openrouterKey: '', model: 'deepseek/deepseek-chat-v3-0324:free', schedulingEnabled: false, calendarId: 'primary', googleClientId: '', googleClientSecret: '', googleRefreshToken: '', googleEmail: '' });
 
-function loadAgentConfig() {
+async function loadAgentConfig() {
+  // 1. Supabase (fonte principal — persiste entre deploys)
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?id=eq.1&select=data`, { method: 'GET', headers: SB_HEADERS });
+      const rows = await r.json();
+      if (r.ok && Array.isArray(rows) && rows[0]?.data && Object.keys(rows[0].data).length > 0) {
+        console.log('✅ Config carregado do Supabase');
+        return { ...DEFAULT_CFG(), ...rows[0].data };
+      }
+    } catch (err) { console.warn('Supabase load error:', err.message); }
+  }
+  // 2. Variável de ambiente legada
   if (process.env.AGENT_CONFIG_JSON) {
-    try { return JSON.parse(process.env.AGENT_CONFIG_JSON); } catch (_) {}
+    try { return { ...DEFAULT_CFG(), ...JSON.parse(process.env.AGENT_CONFIG_JSON) }; } catch (_) {}
   }
+  // 3. Arquivo local (desenvolvimento)
   if (fs.existsSync(AGENT_FILE)) {
-    try { return JSON.parse(fs.readFileSync(AGENT_FILE, 'utf8')); } catch (_) {}
+    try { return { ...DEFAULT_CFG(), ...JSON.parse(fs.readFileSync(AGENT_FILE, 'utf8')) }; } catch (_) {}
   }
-  return { active: false, instanceName: '', instanceToken: '', prompt: '', docText: '' };
+  return DEFAULT_CFG();
 }
 
 function saveAgentConfig(cfg) {
+  // Supabase — fire-and-forget com retry
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?id=eq.1`, {
+      method: 'PATCH',
+      headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ data: cfg, updated_at: new Date().toISOString() }),
+    }).then(r => { if (!r.ok) console.warn('Supabase save failed:', r.status); })
+      .catch(err => console.warn('Supabase save error:', err.message));
+  }
+  // Arquivo local (backup / desenvolvimento)
   try { fs.writeFileSync(AGENT_FILE, JSON.stringify(cfg, null, 2)); } catch (_) {}
 }
 
-let agentConfig = loadAgentConfig();
+// Carrega config assincronamente na inicialização; até lá usa o default
+let agentConfig = DEFAULT_CFG();
+let _configReady = false;
+loadAgentConfig().then(cfg => { agentConfig = cfg; _configReady = true; }).catch(() => { _configReady = true; });
+
+// Garante que agentConfig está carregado antes de qualquer rota sensível
+async function ensureConfig() {
+  if (_configReady) return;
+  agentConfig = await loadAgentConfig();
+  _configReady = true;
+}
+app.use(async (req, res, next) => { await ensureConfig(); next(); });
 
 // Histórico de conversa por contato (em memória — reseta ao reiniciar)
 const conversationHistory = new Map(); // phone → [{role,content}]
