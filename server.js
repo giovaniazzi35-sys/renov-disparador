@@ -563,8 +563,11 @@ app.post('/api/agent/chat', requireAuth, async (req, res) => {
 
 app.post('/api/agent/config', requireAuth, (req, res) => {
   const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model,
-          schedulingEnabled, calendarId, googleClientId, googleClientSecret, googleRefreshToken } = req.body;
+          schedulingEnabled, calendarId, googleClientId, googleClientSecret } = req.body;
   agentConfig = {
+    // Preserva token OAuth e email ao salvar — não apaga o login do Google
+    googleRefreshToken: agentConfig.googleRefreshToken || '',
+    googleEmail:        agentConfig.googleEmail || '',
     active: !!active,
     instanceName: instanceName || '', instanceToken: instanceToken || '',
     prompt: prompt || '', docText: docText || '',
@@ -572,10 +575,85 @@ app.post('/api/agent/config', requireAuth, (req, res) => {
     schedulingEnabled: !!schedulingEnabled,
     calendarId: calendarId || 'primary',
     googleClientId: googleClientId || '', googleClientSecret: googleClientSecret || '',
-    googleRefreshToken: googleRefreshToken || '',
   };
   saveAgentConfig(agentConfig);
   logReq('POST', '/api/agent/config', `active=${agentConfig.active} scheduling=${agentConfig.schedulingEnabled}`);
+  res.json({ ok: true });
+});
+
+// ── Google OAuth login flow ───────────────────────────────────
+
+app.get('/api/agent/google-auth', requireAuth, (req, res) => {
+  const { googleClientId } = agentConfig;
+  if (!googleClientId) return res.status(400).send('<h2>Client ID não configurado.</h2><p>Salve as configurações do Agente IA com seu Client ID antes de fazer login.</p>');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const redirectUri = `${proto}://${req.get('host')}/api/agent/google-callback`;
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: googleClientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email',
+    access_type: 'offline',
+    prompt: 'consent',
+  }).toString();
+  res.redirect(authUrl);
+});
+
+app.get('/api/agent/google-callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) {
+    return res.redirect('/?google_error=' + encodeURIComponent(error || 'sem_codigo'));
+  }
+  try {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol;
+    const redirectUri = `${proto}://${req.get('host')}/api/agent/google-callback`;
+    const body = new URLSearchParams({
+      client_id: agentConfig.googleClientId,
+      client_secret: agentConfig.googleClientSecret,
+      code, redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    }).toString();
+    const r = await proxyFetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const data = await r.json();
+    if (!r.ok || !data.refresh_token) {
+      return res.redirect('/?google_error=' + encodeURIComponent(data.error_description || 'token_invalido'));
+    }
+    // Busca email da conta conectada
+    let email = '';
+    try {
+      const ur = await proxyFetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${data.access_token}`, 'Content-Type': 'application/json' },
+      });
+      const ud = await ur.json();
+      email = ud.email || '';
+    } catch (_) {}
+    agentConfig.googleRefreshToken = data.refresh_token;
+    agentConfig.googleEmail = email;
+    saveAgentConfig(agentConfig);
+    logReq('GET', '/api/agent/google-callback', `email=${email}`);
+    res.redirect('/?google_ok=' + encodeURIComponent(email));
+  } catch (err) {
+    res.redirect('/?google_error=' + encodeURIComponent(err.message));
+  }
+});
+
+app.get('/api/agent/google-status', requireAuth, (req, res) => {
+  res.json({
+    ok: true,
+    connected: !!(agentConfig.googleRefreshToken && agentConfig.googleEmail),
+    email: agentConfig.googleEmail || '',
+  });
+});
+
+app.post('/api/agent/google-disconnect', requireAuth, (req, res) => {
+  agentConfig.googleRefreshToken = '';
+  agentConfig.googleEmail = '';
+  saveAgentConfig(agentConfig);
   res.json({ ok: true });
 });
 
