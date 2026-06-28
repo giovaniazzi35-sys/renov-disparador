@@ -354,7 +354,8 @@ let agentConfig = loadAgentConfig();
 
 async function callOpenRouter(apiKey, model, systemPrompt, messages) {
   const body = JSON.stringify({
-    model: model || 'meta-llama/llama-3.2-3b-instruct:free',
+    model: model || 'deepseek/deepseek-chat-v3-0324:free',
+  temperature: 0.7,
     max_tokens: 400,
     messages: [
       { role: 'system', content: systemPrompt || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.' },
