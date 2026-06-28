@@ -392,6 +392,50 @@ app.get('/api/agent/config', requireAuth, (req, res) => {
   res.json({ ok: true, data: { ...agentConfig, docText: agentConfig.docText ? '(carregado)' : '' } });
 });
 
+// Lista modelos gratuitos do OpenRouter e testa qual responde
+app.post('/api/agent/probe-models', requireAuth, async (req, res) => {
+  const { apiKey } = req.body;
+  if (!apiKey) return res.status(400).json({ error: 'apiKey obrigatória' });
+  try {
+    // 1. Busca lista de modelos
+    const listRes = await proxyFetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const listData = await listRes.json();
+    if (!listRes.ok) return res.status(400).json({ error: listData?.error?.message || 'Chave inválida' });
+
+    // 2. Filtra gratuitos
+    const freeModels = (listData.data || [])
+      .filter(m => m.id && m.id.endsWith(':free'))
+      .map(m => ({ id: m.id, name: m.name || m.id }));
+
+    if (!freeModels.length) return res.json({ ok: true, models: [], workingModel: null });
+
+    // 3. Testa até achar um que responda
+    let workingModel = null;
+    const testBody = JSON.stringify({
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'ok' }],
+    });
+
+    for (const m of freeModels.slice(0, 8)) {
+      try {
+        const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://renov-disparador.vercel.app', 'X-Title': 'Renov Agente IA' },
+          body: JSON.stringify({ ...JSON.parse(testBody), model: m.id }),
+        });
+        const d = await r.json();
+        if (r.ok && d?.choices?.[0]?.message?.content) { workingModel = m.id; break; }
+      } catch (_) {}
+    }
+    res.json({ ok: true, models: freeModels, workingModel });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.post('/api/agent/chat', requireAuth, async (req, res) => {
   const { apiKey, model, prompt, docText, messages } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'API key obrigatória' });
