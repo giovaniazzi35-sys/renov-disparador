@@ -1163,6 +1163,58 @@
         </select>
       </div>
 
+      <!-- Google Agenda -->
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:12px">
+        <div class="row-between" style="margin-bottom:10px">
+          <span style="font-weight:600;font-size:15px">📅 Agendamento — Google Agenda</span>
+          <label class="toggle-label" style="gap:8px">
+            <input type="checkbox" id="agent-scheduling-enabled" />
+            <span class="toggle-switch"></span>
+            <span style="font-size:13px">Ativar</span>
+          </label>
+        </div>
+
+        <div id="calendar-fields" style="display:none">
+          <div class="field">
+            <label class="field-label">ID do Calendário <span style="font-weight:400;color:var(--text-3)">(deixe "primary" para o calendário principal)</span></label>
+            <input type="text" id="agent-calendar-id" placeholder="primary" value="primary" />
+          </div>
+
+          <details style="margin:10px 0;background:var(--bg-2);border-radius:8px;padding:10px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-2)">🔧 Como obter as credenciais do Google</summary>
+            <div style="font-size:12px;line-height:1.7;margin-top:10px;color:var(--text-2)">
+              <b>Passo 1:</b> Acesse <b>console.cloud.google.com</b> → Criar projeto → Ativar API do Google Calendar<br>
+              <b>Passo 2:</b> APIs e Serviços → Credenciais → Criar credenciais → ID de cliente OAuth<br>
+              &nbsp;&nbsp;&nbsp;Tipo: <b>Aplicativo da Web</b> → URI de redirecionamento autorizado:<br>
+              &nbsp;&nbsp;&nbsp;<code style="background:#0003;padding:2px 4px;border-radius:3px">https://developers.google.com/oauthplayground</code><br>
+              <b>Passo 3:</b> Anote o <b>Client ID</b> e o <b>Client Secret</b><br>
+              <b>Passo 4:</b> Acesse <b>developers.google.com/oauthplayground</b><br>
+              &nbsp;&nbsp;&nbsp;→ Clique no ícone ⚙ → marque "Use your own OAuth credentials" → cole Client ID e Secret<br>
+              &nbsp;&nbsp;&nbsp;→ Em "Step 1" selecione <b>Google Calendar API v3</b> → escopo <b>calendar</b><br>
+              &nbsp;&nbsp;&nbsp;→ Authorize → "Step 2" → Exchange authorization code → copie o <b>Refresh Token</b>
+            </div>
+          </details>
+
+          <div class="field">
+            <label class="field-label">Client ID</label>
+            <input type="text" id="agent-google-client-id" placeholder="12345-abc.apps.googleusercontent.com" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label class="field-label">Client Secret</label>
+            <input type="password" id="agent-google-client-secret" placeholder="GOCSPX-..." autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label class="field-label">Refresh Token</label>
+            <input type="password" id="agent-google-refresh-token" placeholder="1//0e..." autocomplete="new-password" />
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <button class="btn-secondary" id="btn-test-calendar" style="flex:1">🗓 Testar conexão com calendário</button>
+          </div>
+          <div id="calendar-test-status" style="font-size:12px;margin-top:6px;min-height:18px"></div>
+        </div>
+      </div>
+
       <div style="display:flex;gap:10px;margin-top:8px">
         <button class="btn-primary btn-lg" id="btn-agent-save" style="flex:1">💾 Salvar configuração</button>
       </div>
@@ -2531,6 +2583,15 @@ const Agent = {
         document.getElementById('agent-doc-name').textContent = '📄 Documento carregado no servidor';
         document.getElementById('agent-doc-name').classList.remove('hidden');
       }
+      // Calendário
+      const schedEnable = !!d.schedulingEnabled;
+      document.getElementById('agent-scheduling-enabled').checked = schedEnable;
+      document.getElementById('calendar-fields').style.display = schedEnable ? '' : 'none';
+      if (d.calendarId) document.getElementById('agent-calendar-id').value = d.calendarId;
+      if (d.googleClientId) document.getElementById('agent-google-client-id').value = d.googleClientId;
+      if (d.googleClientSecret) document.getElementById('agent-google-client-secret').value = d.googleClientSecret;
+      if (d.googleRefreshToken) document.getElementById('agent-google-refresh-token').value = d.googleRefreshToken;
+
       this.updateBadge(d.active);
       const savedKey = localStorage.getItem('agent_or_key');
       if (savedKey) document.getElementById('agent-or-key').value = savedKey;
@@ -2552,7 +2613,14 @@ const Agent = {
 
       const res = await fetch('/api/agent/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName, instanceToken, prompt, docText: this.docText, openrouterKey, model }),
+        body: JSON.stringify({
+          instanceName, instanceToken, prompt, docText: this.docText, openrouterKey, model,
+          schedulingEnabled: document.getElementById('agent-scheduling-enabled').checked,
+          calendarId: document.getElementById('agent-calendar-id').value.trim() || 'primary',
+          googleClientId: document.getElementById('agent-google-client-id').value.trim(),
+          googleClientSecret: document.getElementById('agent-google-client-secret').value.trim(),
+          googleRefreshToken: document.getElementById('agent-google-refresh-token').value.trim(),
+        }),
       });
       const j = await res.json();
       if (j.ok) {
@@ -2566,6 +2634,34 @@ const Agent = {
       UI.addBanner('error', 'Erro: ' + err.message);
     } finally {
       btn.disabled = false; btn.textContent = '💾 Salvar configuração';
+    }
+  },
+
+  async testCalendar() {
+    const btn = document.getElementById('btn-test-calendar');
+    const statusEl = document.getElementById('calendar-test-status');
+    btn.disabled = true; btn.textContent = '⏳ Testando...';
+    statusEl.style.color = 'var(--text-3)'; statusEl.textContent = 'Conectando ao Google Agenda...';
+    try {
+      const res = await fetch('/api/agent/test-calendar', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const j = await res.json();
+      if (!res.ok || j.error) {
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '✗ ' + (j.error || 'Erro desconhecido');
+        return;
+      }
+      if (!j.slots || j.slots.length === 0) {
+        statusEl.style.color = '#fbbf24';
+        statusEl.textContent = '⚠ Conectado! Mas não há horários livres nos próximos dias (11h–17h, seg–sex).';
+        return;
+      }
+      statusEl.style.color = '#4ade80';
+      statusEl.textContent = '✓ Calendário conectado! Próximos horários livres: ' + j.slots.map(s => s.brt).join(' | ');
+    } catch (err) {
+      statusEl.style.color = '#f87171';
+      statusEl.textContent = '✗ Falha: ' + err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🗓 Testar conexão com calendário';
     }
   },
 
@@ -2785,6 +2881,12 @@ const Agent = {
     };
 
     // Botões config
+    // Toggle seção calendário
+    document.getElementById('agent-scheduling-enabled').onchange = e => {
+      document.getElementById('calendar-fields').style.display = e.target.checked ? '' : 'none';
+    };
+    document.getElementById('btn-test-calendar').onclick = () => this.testCalendar();
+
     document.getElementById('btn-agent-load-instances').onclick = () => this.loadInstances();
     document.getElementById('btn-agent-save').onclick = () => this.save();
     document.getElementById('btn-toggle-agent').onclick = () => this.toggle();

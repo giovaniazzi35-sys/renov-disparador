@@ -352,6 +352,118 @@ function saveAgentConfig(cfg) {
 
 let agentConfig = loadAgentConfig();
 
+// Histórico de conversa por contato (em memória — reseta ao reiniciar)
+const conversationHistory = new Map(); // phone → [{role,content}]
+const MAX_HISTORY = 12; // mensagens mantidas por contato
+
+// ── Google Calendar helpers ───────────────────────────────────
+
+async function getGoogleAccessToken() {
+  const { googleClientId: cid, googleClientSecret: csec, googleRefreshToken: rt } = agentConfig;
+  if (!cid || !csec || !rt) return null;
+  const body = `client_id=${encodeURIComponent(cid)}&client_secret=${encodeURIComponent(csec)}&refresh_token=${encodeURIComponent(rt)}&grant_type=refresh_token`;
+  const r = await proxyFetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d?.error_description || 'Falha ao obter token Google');
+  return d.access_token;
+}
+
+async function getCalendarBusySlots(accessToken, calendarId) {
+  const calId = encodeURIComponent(calendarId || 'primary');
+  const now = new Date();
+  const maxDate = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${now.toISOString()}&timeMax=${maxDate.toISOString()}&singleEvents=true&orderBy=startTime&fields=items(start,end,status)`;
+  const r = await proxyFetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d?.error?.message || 'Erro ao ler calendário');
+  return (d.items || []).filter(e => e.status !== 'cancelled').map(e => ({
+    start: new Date(e.start.dateTime || e.start.date + 'T00:00:00Z'),
+    end:   new Date(e.end.dateTime   || e.end.date   + 'T23:59:59Z'),
+  }));
+}
+
+// Retorna próximos slots livres (1h) entre 11-17 BRT, seg-sex
+function findAvailableSlots(busySlots, count = 2) {
+  const slots = [];
+  const now = new Date();
+  // BRT = UTC-3. Representação BRT como "UTC falso": brtDate = new Date(utc - 3h)
+  const nowBRT = new Date(now.getTime() - 3 * 3600000);
+
+  for (let dayOffset = 0; dayOffset <= 12 && slots.length < count; dayOffset++) {
+    // Data BRT do dia
+    const dayBRT = new Date(Date.UTC(nowBRT.getUTCFullYear(), nowBRT.getUTCMonth(), nowBRT.getUTCDate() + dayOffset));
+    const brtDow = dayBRT.getUTCDay(); // 0=Dom,6=Sab
+    if (brtDow === 0 || brtDow === 6) continue;
+
+    for (let brtHour = 11; brtHour <= 16 && slots.length < count; brtHour++) {
+      // Converter hora BRT → UTC: brtHour UTC do dayBRT + 3h
+      const slotStart = new Date(dayBRT.getTime() + (brtHour + 3) * 3600000);
+      const slotEnd   = new Date(slotStart.getTime() + 3600000);
+      // Ignora slots no passado (mínimo 2h de antecedência)
+      if (slotStart.getTime() < now.getTime() + 2 * 3600000) continue;
+      const isBusy = busySlots.some(b => slotStart < b.end && slotEnd > b.start);
+      if (!isBusy) slots.push(slotStart);
+    }
+  }
+  return slots;
+}
+
+function formatSlotBRT(utcDate) {
+  const brt = new Date(utcDate.getTime() - 3 * 3600000);
+  const days  = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+  const months= ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  return `${days[brt.getUTCDay()]}, ${brt.getUTCDate()} de ${months[brt.getUTCMonth()]} às ${String(brt.getUTCHours()).padStart(2,'0')}:00`;
+}
+
+// Detecta [AGENDAR:2025-01-14T14:00] na resposta do AI
+function parseScheduleTag(text) {
+  const match = text.match(/\[AGENDAR:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})\]/);
+  if (!match) return null;
+  // Converte BRT ISO → UTC Date: hora BRT + 3h = UTC
+  const [datePart, timePart] = match[1].split('T');
+  const [y,mo,d] = datePart.split('-').map(Number);
+  const [h,m]    = timePart.split(':').map(Number);
+  return new Date(Date.UTC(y, mo-1, d, h+3, m, 0));
+}
+
+async function createCalendarEvent(accessToken, calendarId, slotUtc, clientPhone) {
+  const calId   = encodeURIComponent(calendarId || 'primary');
+  const slotEnd = new Date(slotUtc.getTime() + 3600000);
+
+  function toISOBRT(d) {
+    const b = new Date(d.getTime() - 3 * 3600000);
+    const pad = n => String(n).padStart(2,'0');
+    return `${b.getUTCFullYear()}-${pad(b.getUTCMonth()+1)}-${pad(b.getUTCDate())}T${pad(b.getUTCHours())}:${pad(b.getUTCMinutes())}:00-03:00`;
+  }
+
+  const r = await proxyFetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?conferenceDataVersion=1`,
+    {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: `Reunião Renov Assessoria`,
+        description: `Agendado via WhatsApp — ${clientPhone}`,
+        start: { dateTime: toISOBRT(slotUtc), timeZone: 'America/Sao_Paulo' },
+        end:   { dateTime: toISOBRT(slotEnd),  timeZone: 'America/Sao_Paulo' },
+        conferenceData: {
+          createRequest: {
+            requestId: `renov-${Date.now()}-${clientPhone}`,
+            conferenceSolutionKey: { type: 'hangoutsMeet' },
+          },
+        },
+      }),
+    }
+  );
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error?.message || 'Erro ao criar evento');
+  return data?.conferenceData?.entryPoints?.[0]?.uri || data?.hangoutLink || null;
+}
+
 async function callOpenRouter(apiKey, model, systemPrompt, messages) {
   const body = JSON.stringify({
     model: model || 'deepseek/deepseek-chat-v3-0324:free',
@@ -450,11 +562,33 @@ app.post('/api/agent/chat', requireAuth, async (req, res) => {
 });
 
 app.post('/api/agent/config', requireAuth, (req, res) => {
-  const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model } = req.body;
-  agentConfig = { active: !!active, instanceName: instanceName || '', instanceToken: instanceToken || '', prompt: prompt || '', docText: docText || '', openrouterKey: openrouterKey || '', model: model || 'meta-llama/llama-3.2-3b-instruct:free' };
+  const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model,
+          schedulingEnabled, calendarId, googleClientId, googleClientSecret, googleRefreshToken } = req.body;
+  agentConfig = {
+    active: !!active,
+    instanceName: instanceName || '', instanceToken: instanceToken || '',
+    prompt: prompt || '', docText: docText || '',
+    openrouterKey: openrouterKey || '', model: model || 'deepseek/deepseek-chat-v3-0324:free',
+    schedulingEnabled: !!schedulingEnabled,
+    calendarId: calendarId || 'primary',
+    googleClientId: googleClientId || '', googleClientSecret: googleClientSecret || '',
+    googleRefreshToken: googleRefreshToken || '',
+  };
   saveAgentConfig(agentConfig);
-  logReq('POST', '/api/agent/config', `active=${agentConfig.active} instance=${agentConfig.instanceName}`);
+  logReq('POST', '/api/agent/config', `active=${agentConfig.active} scheduling=${agentConfig.schedulingEnabled}`);
   res.json({ ok: true });
+});
+
+app.post('/api/agent/test-calendar', requireAuth, async (req, res) => {
+  try {
+    const token = await getGoogleAccessToken();
+    if (!token) return res.status(400).json({ error: 'Credenciais Google não configuradas.' });
+    const busy = await getCalendarBusySlots(token, agentConfig.calendarId);
+    const slots = findAvailableSlots(busy, 3);
+    res.json({ ok: true, slots: slots.map(s => ({ utc: s.toISOString(), brt: formatSlotBRT(s) })) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/agent/toggle', requireAuth, (req, res) => {
@@ -474,7 +608,7 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     const msgData = req.body?.data || req.body?.messages?.[0] || req.body;
     if (!msgData) return;
-    if (msgData?.key?.fromMe) return; // ignora mensagens próprias
+    if (msgData?.key?.fromMe) return;
     const isGroup = (msgData?.key?.remoteJid || '').includes('@g.us');
     if (isGroup) return;
 
@@ -489,16 +623,93 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     const key = agentConfig.openrouterKey;
     if (!key) return;
-    const sys = [agentConfig.prompt, agentConfig.docText ? `\n\n# Documento:\n${agentConfig.docText}` : ''].join('').trim();
-    const reply = await callOpenRouter(key, agentConfig.model, sys, [{ role: 'user', content: text }]);
+
+    // Mantém histórico de conversa por contato
+    if (!conversationHistory.has(from)) conversationHistory.set(from, []);
+    const history = conversationHistory.get(from);
+    history.push({ role: 'user', content: text });
+    if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+
+    // Monta system prompt — injeta slots disponíveis se agendamento ativo
+    let sysBase = [agentConfig.prompt || '', agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''].join('').trim();
+
+    if (agentConfig.schedulingEnabled) {
+      let slotsText = '';
+      try {
+        const gToken = await getGoogleAccessToken();
+        if (gToken) {
+          const busy  = await getCalendarBusySlots(gToken, agentConfig.calendarId);
+          const slots = findAvailableSlots(busy, 2);
+          if (slots.length > 0) {
+            slotsText = '\n\n# Horários disponíveis para reunião (horário de Brasília):\n'
+              + slots.map((s, i) => `- Opção ${i + 1}: ${formatSlotBRT(s)}`).join('\n');
+            slotsText += '\n\nRegras de agendamento:\n'
+              + '- Ofereça no máximo 2 opções ao cliente quando ele demonstrar interesse em reunião.\n'
+              + '- Quando o cliente CONFIRMAR um horário específico, inclua na sua resposta o marcador: [AGENDAR:' + slots[0].toISOString().slice(0,16).replace('T', 'T') + '] (substituindo pelo ISO do horário confirmado, sempre em UTC+0).\n'
+              + '- Não tente vender ou convencer — apenas facilite o agendamento.\n'
+              + '- Nunca invente horários fora dessa lista.';
+            // Reformula com ISOstring correto por slot
+            const slotMarkers = slots.map(s => s.toISOString().slice(0,16));
+            slotsText = '\n\n# Horários disponíveis para reunião (horário de Brasília):\n'
+              + slots.map((s, i) => `- Opção ${i + 1}: ${formatSlotBRT(s)} [ISO:${slotMarkers[i]}]`).join('\n');
+            slotsText += '\n\nRegras de agendamento:\n'
+              + '- Ofereça no máximo 2 opções quando o cliente demonstrar interesse.\n'
+              + '- Quando o cliente CONFIRMAR um horário, inclua na sua resposta EXATAMENTE: [AGENDAR:ISO_DO_HORARIO] usando o ISO da opção confirmada.\n'
+              + '- Exemplo: [AGENDAR:' + slotMarkers[0] + ']\n'
+              + '- Não invente horários além dessa lista. Não tente vender fora da reunião.';
+          } else {
+            slotsText = '\n\n# Agendamento: Não há horários disponíveis nos próximos dias. Informe ao cliente e peça que tente novamente mais tarde.';
+          }
+        }
+      } catch (calErr) {
+        console.error('Calendar slot error:', calErr.message);
+      }
+      sysBase += slotsText;
+    }
+
+    const reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
     if (!reply) return;
 
+    // Adiciona resposta ao histórico
+    history.push({ role: 'assistant', content: reply });
+    if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+
+    // Detecta marcador de agendamento
+    const scheduleTag = parseScheduleTag(reply);
+    let cleanReply = reply.replace(/\[AGENDAR:[^\]]+\]/g, '').trim();
+    let meetLink = null;
+
+    if (scheduleTag && agentConfig.schedulingEnabled) {
+      try {
+        const gToken = await getGoogleAccessToken();
+        if (gToken) {
+          meetLink = await createCalendarEvent(gToken, agentConfig.calendarId, scheduleTag, from);
+          console.log(`[${ts}] 📅 Reunião criada para ${from}: ${meetLink}`);
+        }
+      } catch (calErr) {
+        console.error('Calendar create error:', calErr.message);
+      }
+    }
+
+    // Envia resposta principal
     await proxyFetch(`${EVOLUTION_URL}/send/text`, {
       method: 'POST',
       headers: { apikey: agentConfig.instanceToken },
-      body: JSON.stringify({ number: from, text: reply, delay: 1500 }),
+      body: JSON.stringify({ number: from, text: cleanReply, delay: 1500 }),
     });
-    console.log(`[${ts}] 🤖 Agente respondeu para ${from}: ${reply.slice(0, 60)}`);
+
+    // Envia link do Meet separado
+    if (meetLink) {
+      const slotBRT = formatSlotBRT(scheduleTag);
+      const linkMsg = `📅 *Reunião confirmada!*\n\n🗓 ${slotBRT}\n🔗 Link para entrar:\n${meetLink}\n\nEsperamos você! 🚀`;
+      await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+        method: 'POST',
+        headers: { apikey: agentConfig.instanceToken },
+        body: JSON.stringify({ number: from, text: linkMsg, delay: 3000 }),
+      });
+    }
+
+    console.log(`[${ts}] 🤖 Agente respondeu para ${from}: ${cleanReply.slice(0, 60)}`);
   } catch (err) {
     console.error('Agente IA erro:', err.message);
   }
