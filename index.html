@@ -1916,8 +1916,15 @@ function translateError(msg) {
     return 'Instância não encontrada';
   if (m.includes('no whatsapp') || m.includes('não tem whatsapp') || m.includes('463'))
     return 'Número sem WhatsApp';
+
+  // Erros de sessão baileys (prefixo interno do servidor)
+  if (m.includes('instancia_sem_sessao') || m.includes('store doesn') || m.includes('device jid') || m.includes('jid not found'))
+    return 'Sessão não inicializada — reinicie a instância no painel de conexão';
+  if (m.includes('instancia_desconectada') || m.includes('connection closed') || m.includes('stream errored') || m.includes('bad mac'))
+    return 'Sessão encerrada — reconecte a instância no painel de conexão';
   if (m.includes('not connected') || m.includes('disconnected'))
     return 'Instância desconectada — reconecte o WhatsApp';
+
   if (m.includes('invalid number') || m.includes('invalid phone'))
     return 'Número inválido';
   if (m.includes('rate') || m.includes('too many') || msg === 'HTTP 429')
@@ -1930,6 +1937,17 @@ function translateError(msg) {
   if (/^HTTP \d{3}$/.test(msg)) return `Erro do servidor (${msg.split(' ')[1]})`;
 
   return msg; // já em pt-br ou mensagem técnica desconhecida
+}
+
+// Retorna true se o erro indica problema na instância (não no número)
+function isInstanceError(msg) {
+  const m = String(msg).toLowerCase();
+  return m.includes('instancia_sem_sessao') || m.includes('instancia_desconectada')
+      || m.includes('store doesn') || m.includes('device jid') || m.includes('jid not found')
+      || m.includes('connection closed') || m.includes('stream errored') || m.includes('bad mac')
+      || m.includes('sessão não inicializada') || m.includes('sessão encerrada')
+      || m.includes('token inválido') || m.includes('instância não encontrada')
+      || m.includes('não encontrada') || msg === 'HTTP 401' || msg === 'HTTP 403' || msg === 'HTTP 404';
 }
 
 // ============================================================
@@ -2004,6 +2022,7 @@ const Dispatch = {
     let sent = 0, errors = 0, totalDelay = 0, delayCount = 0;
     const total = contacts.length;
     let interrupted = false;
+    let consecutiveInstanceErrors = 0;
 
     const mediaOn = document.getElementById('toggle-media').checked;
     const activeMedia = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url' && m.url.trim()) || (m.mode==='upload' && m.base64)) : [];
@@ -2042,11 +2061,25 @@ const Dispatch = {
 
       if (result.ok) {
         sent++;
+        consecutiveInstanceErrors = 0;
         Log.append(contact, 'success');
         if (window._saveLastContact) window._saveLastContact(token, contact);
       } else {
         errors++;
-        Log.append(contact, 'error', translateError(result.errorMessage));
+        const translated = translateError(result.errorMessage);
+        Log.append(contact, 'error', translated);
+
+        // Detecta erro de instância (não do número) — aborta para não spammar erros
+        if (isInstanceError(result.errorMessage)) {
+          consecutiveInstanceErrors++;
+          if (consecutiveInstanceErrors >= 2) {
+            interrupted = true;
+            Log.appendSystem(`⚠️ Disparo abortado: problema na instância (${translated}). Reinicie ou reconecte a instância no painel de conexão e tente novamente.`);
+            break;
+          }
+        } else {
+          consecutiveInstanceErrors = 0;
+        }
       }
       UI.updateProgress(i + 1, total);
 

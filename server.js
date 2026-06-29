@@ -165,13 +165,23 @@ function guessMime(mediaType, filename) {
   return defaults[mediaType] || 'application/octet-stream';
 }
 
-// ── Traduz códigos de erro da Evolution Go ───────────────────
+// ── Traduz erros baileys/Evolution Go ────────────────────────
 function translateEvolutionError(status, body) {
   if (status === 463) return 'Número sem WhatsApp';
   if (status === 401 || status === 403) return 'Token inválido ou sem permissão';
   if (status === 404) return 'Instância não encontrada';
   if (status === 408 || status === 504) return 'Timeout — instância pode estar desconectada';
-  // Para 400 e 500: retorna a mensagem real da Evolution Go para facilitar diagnóstico
+
+  const raw = (body.error || body.message || body.response?.message || '').toLowerCase();
+
+  // Erros de sessão baileys (jid / store)
+  if (raw.includes('store doesn') || raw.includes('device jid') || raw.includes('jid not found'))
+    return 'INSTANCIA_SEM_SESSAO: Sessão não inicializada — reinicie a instância';
+  if (raw.includes('connection closed') || raw.includes('connection lost') || raw.includes('stream errored') || raw.includes('bad mac'))
+    return 'INSTANCIA_DESCONECTADA: Conexão perdida — reconecte a instância';
+  if (raw.includes('not connected') || raw.includes('disconnected'))
+    return 'INSTANCIA_DESCONECTADA: Instância desconectada — reconecte o WhatsApp';
+
   return body.error || body.message || body.response?.message || `Erro ${status}`;
 }
 
