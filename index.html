@@ -2147,7 +2147,7 @@ const Validate = {
     return ok;
   },
   step4() {
-    const { min } = Delay._getTotalSec();
+    const { min, max } = Delay._getTotalSec();
     const errEl = document.getElementById('step4-error');
     if (min < 1) { errEl.textContent = 'Tempo mínimo deve ser pelo menos 1 segundo.'; errEl.classList.remove('hidden'); return false; }
     if (max < min) { errEl.textContent = 'Tempo máximo deve ser maior ou igual ao mínimo.'; errEl.classList.remove('hidden'); return false; }
