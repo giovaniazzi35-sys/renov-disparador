@@ -348,7 +348,7 @@ const AGENT_FILE    = path.join(__dirname, 'agent-config.json');
 const SUPABASE_URL  = (process.env.SUPABASE_URL  || '').replace(/\/$/, '');
 const SUPABASE_KEY  = process.env.SUPABASE_KEY  || '';
 const SB_HEADERS    = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
-const DEFAULT_CFG   = () => ({ active: false, instanceName: '', instanceToken: '', prompt: '', docText: '', openrouterKey: '', model: 'deepseek/deepseek-chat-v3-0324:free', schedulingEnabled: false, calendarId: 'primary', googleClientId: '', googleClientSecret: '', googleRefreshToken: '', googleEmail: '' });
+const DEFAULT_CFG   = () => ({ active: false, instanceName: '', instanceToken: '', prompt: '', docText: '', openrouterKey: '', model: 'deepseek/deepseek-chat-v3-0324:free', selectedPlaybook: 0, schedulingEnabled: false, calendarId: 'primary', googleClientId: '', googleClientSecret: '', googleRefreshToken: '', googleEmail: '' });
 
 async function loadAgentConfig() {
   // 1. Supabase (fonte principal — persiste entre deploys)

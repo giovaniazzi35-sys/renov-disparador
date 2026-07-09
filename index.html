@@ -626,6 +626,17 @@
     .btn-toggle-agent.deactivate { background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#f87171; }
     .agent-instance-label { font-size:12px; color:var(--text-3); margin-left:auto; }
     .agent-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-3); margin-bottom:10px; margin-top:20px; }
+    /* Playbook cards do agente */
+    .agent-pb-card { display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;background:var(--card2); }
+    .agent-pb-card:hover { border-color:var(--accent);background:var(--accent-glow); }
+    .agent-pb-card.selected { border-color:var(--accent);background:rgba(45,212,191,.08); }
+    .agent-pb-card input[type=radio] { display:none; }
+    .agent-pb-dot { width:16px;height:16px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;transition:all .15s; }
+    .agent-pb-card.selected .agent-pb-dot { border-color:var(--accent);background:var(--accent); }
+    .agent-pb-info { flex:1;min-width:0; }
+    .agent-pb-name { font-weight:700;font-size:13px; }
+    .agent-pb-desc { font-size:11px;color:var(--text-3);margin-top:2px; }
+    .agent-pb-count { font-size:11px;color:var(--accent);white-space:nowrap;flex-shrink:0; }
     /* Toggle switch genérico usado no Agente IA */
     .toggle-label { display:inline-flex;align-items:center;gap:8px;cursor:pointer; }
     .toggle-label input[type=checkbox] { display:none; }
@@ -1144,23 +1155,19 @@
         </div>
       </div>
 
-      <!-- Prompt -->
+      <!-- Seletor de Playbook -->
       <div class="field">
-        <label class="field-label">Prompt do agente <span style="color:var(--text-3);font-weight:400">(sem limite de caracteres)</span></label>
-        <textarea id="agent-prompt" rows="8" placeholder="Ex: Você é um agente de qualificação comercial da Renov Assessoria. Seu objetivo é qualificar leads interessados em tráfego pago. Responda de forma curta, objetiva e nunca invente informações. Se não souber, diga que vai verificar e retornar em breve." style="min-height:180px;resize:vertical"></textarea>
+        <label class="field-label">Playbook do agente <span style="color:var(--text-3);font-weight:400">— define o contexto e estilo de resposta da IA</span></label>
+        <div id="agent-playbook-cards" style="display:flex;flex-direction:column;gap:8px;margin-top:4px"></div>
+        <details style="margin-top:10px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-3);user-select:none">⚙ Ver / editar prompt gerado</summary>
+          <textarea id="agent-prompt" rows="10" style="margin-top:8px;min-height:160px;resize:vertical;font-size:12px"></textarea>
+        </details>
       </div>
 
-      <!-- Documento de treinamento -->
-      <div class="field">
-        <label class="field-label">Documento de treinamento <span style="color:var(--text-3);font-weight:400">(PDF ou TXT — opcional)</span></label>
-        <div class="agent-doc-zone" id="agent-doc-zone">
-          <input type="file" id="agent-doc-file" accept=".pdf,.txt,.md" />
-          <div style="font-size:28px;margin-bottom:8px">📄</div>
-          <p style="color:var(--text-2);font-size:13px">Clique para selecionar ou arraste o arquivo aqui</p>
-          <div class="agent-doc-name hidden" id="agent-doc-name"></div>
-        </div>
-        <div class="inline-err hidden" id="agent-doc-err"></div>
-      </div>
+      <!-- campo oculto — mantido para compatibilidade com readDoc (não exibido) -->
+      <input type="file" id="agent-doc-file" accept=".pdf,.txt,.md" style="display:none" />
+      <div class="inline-err hidden" id="agent-doc-err"></div>
 
       <!-- Webhook URL -->
       <div class="field">
@@ -2707,6 +2714,14 @@ Regras:
 - Nunca mencione preços, valores ou propostas — isso é assunto de reunião.
 - Se receber um áudio transcrito com "[Áudio transcrito]:", responda normalmente como se fosse texto.`;
 
+// Gera prompt do agente baseado no playbook selecionado
+function buildAgentPrompt(playbookIdx) {
+  const group = PLAYBOOK_GROUPS[playbookIdx];
+  const msgs = group ? group.msgs : PLAYBOOK_GROUPS[0].msgs;
+  const examples = msgs.map((m, i) => `[Modelo ${i + 1}]\n${m.text}`).join('\n\n');
+  return DEFAULT_AGENT_PROMPT + `\n\n# Playbook ativo: "${group ? group.label : PLAYBOOK_GROUPS[0].label}"\nAs mensagens abaixo foram enviadas aos prospects. Use-as como referência de tom, contexto e proposta de valor ao responder:\n\n${examples}`;
+}
+
 // ============================================================
 // AGENTE IA
 // ============================================================
@@ -2714,6 +2729,7 @@ const Agent = {
   docText: '',
   pollTimer: null,
   convPollTimer: null,
+  selectedPlaybook: 0,
   chatHistory: [], // [{role:'user'|'assistant', content:''}]
 
   async loadInstances() {
@@ -2731,6 +2747,31 @@ const Agent = {
       });
     } catch (err) {
       UI.addBanner('error', 'Erro ao carregar instâncias: ' + err.message);
+    }
+  },
+
+  initPlaybookCards() {
+    const container = document.getElementById('agent-playbook-cards');
+    PLAYBOOK_GROUPS.forEach((group, idx) => {
+      const card = document.createElement('label');
+      card.className = 'agent-pb-card' + (idx === 0 ? ' selected' : '');
+      card.innerHTML = `
+        <div class="agent-pb-dot"></div>
+        <div class="agent-pb-info">
+          <div class="agent-pb-name">${esc(group.label)}</div>
+          <div class="agent-pb-desc">${idx === 0 ? 'Playbook geral — redes e franquias' : idx === 1 ? 'Foco em óticas — previsibilidade de clientes' : 'Abordagem direta e objetiva — óticas e redes'}</div>
+        </div>
+        <div class="agent-pb-count">${group.msgs.length} modelos</div>`;
+      card.onclick = () => this.selectPlaybook(idx, true);
+      container.appendChild(card);
+    });
+  },
+
+  selectPlaybook(idx, updatePrompt = true) {
+    this.selectedPlaybook = idx;
+    document.querySelectorAll('.agent-pb-card').forEach((c, i) => c.classList.toggle('selected', i === idx));
+    if (updatePrompt) {
+      document.getElementById('agent-prompt').value = buildAgentPrompt(idx);
     }
   },
 
@@ -2759,9 +2800,10 @@ const Agent = {
         opt.textContent = m.name + (m.id === j.workingModel ? ' ✓' : '');
         sel.appendChild(opt);
       });
-      sel.value = j.workingModel;
+      // Sempre seleciona o primeiro da lista; workingModel confirma que funciona
+      sel.value = j.models[0].id;
       statusEl.style.color = '#4ade80';
-      statusEl.textContent = `✓ ${j.models.length} modelos carregados. Usando: ${j.workingModel}`;
+      statusEl.textContent = `✓ ${j.models.length} modelos carregados. Usando: ${j.models[0].id}`;
     } catch (_) {}
   },
 
@@ -2773,13 +2815,10 @@ const Agent = {
       const d = j.data;
       document.getElementById('agent-instance-select').value = d.instanceName || '';
       document.getElementById('agent-token').value = d.instanceToken || '';
-      // Usa prompt salvo ou injeta o padrão
-      document.getElementById('agent-prompt').value = d.prompt || DEFAULT_AGENT_PROMPT;
       if (d.model) document.getElementById('agent-model').value = d.model;
-      if (d.docText === '(carregado)') {
-        document.getElementById('agent-doc-name').textContent = '📄 Documento carregado no servidor';
-        document.getElementById('agent-doc-name').classList.remove('hidden');
-      }
+      // Restaura playbook selecionado (ou padrão 0)
+      const pbIdx = typeof d.selectedPlaybook === 'number' ? d.selectedPlaybook : 0;
+      this.selectPlaybook(pbIdx, false); // false = não salva ainda
       // Calendário
       const schedEnable = !!d.schedulingEnabled;
       document.getElementById('agent-scheduling-enabled').checked = schedEnable;
@@ -2803,17 +2842,18 @@ const Agent = {
     try {
       const instanceName = document.getElementById('agent-instance-select').value;
       const instanceToken = document.getElementById('agent-token').value.trim();
-      const prompt = document.getElementById('agent-prompt').value.trim();
+      // Prompt vem do textarea (gerado pelo playbook ou editado manualmente)
+      const prompt = document.getElementById('agent-prompt').value.trim() || buildAgentPrompt(this.selectedPlaybook);
       const openrouterKey = document.getElementById('agent-or-key').value.trim();
       const model = document.getElementById('agent-model').value;
       if (!instanceToken) { UI.addBanner('warning', 'Informe o token da instância.'); return; }
-      if (!prompt) { UI.addBanner('warning', 'Informe o prompt do agente.'); return; }
       if (!openrouterKey) { UI.addBanner('warning', 'Informe a chave da API OpenRouter.'); return; }
 
       const res = await fetch('/api/agent/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceName, instanceToken, prompt, docText: this.docText, openrouterKey, model,
+          instanceName, instanceToken, prompt, docText: '', openrouterKey, model,
+          selectedPlaybook: this.selectedPlaybook,
           schedulingEnabled: document.getElementById('agent-scheduling-enabled').checked,
           googleClientId: document.getElementById('agent-google-client-id').value.trim(),
           googleClientSecret: document.getElementById('agent-google-client-secret').value.trim(),
@@ -3221,6 +3261,7 @@ const Agent = {
 
     document.getElementById('btn-refresh-convs').onclick = () => this.loadConversations();
 
+    this.initPlaybookCards();
     this.loadInstances();
     this.loadConfig();
     this.loadConversations();
