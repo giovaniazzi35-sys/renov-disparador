@@ -417,16 +417,20 @@ const conversationHistory = new Map(); // phone → [{role,content}]
 // Buffer para juntar mensagens seguidas do mesmo contato antes de responder
 const msgBuffer = new Map(); // phone → { texts: [], seq: 0 }
 
+// Status de qualificação por contato: potencial | desqualificado | agencia | ''
+const conversationStatus = new Map(); // phone → status
+
 // Carrega histórico do Supabase se ainda não está em memória (sobrevive a cold starts)
 async function loadConversation(phone) {
   if (conversationHistory.has(phone)) return;
   if (!SUPABASE_URL || !SUPABASE_KEY) { conversationHistory.set(phone, []); return; }
   try {
-    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?phone=eq.${phone}&select=messages,disabled`, { method: 'GET', headers: SB_HEADERS });
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?phone=eq.${phone}&select=messages,disabled,status`, { method: 'GET', headers: SB_HEADERS });
     const rows = await r.json();
     if (r.ok && Array.isArray(rows) && rows[0]) {
       conversationHistory.set(phone, Array.isArray(rows[0].messages) ? rows[0].messages : []);
       if (rows[0].disabled) disabledNumbers.add(phone); else disabledNumbers.delete(phone);
+      if (rows[0].status) conversationStatus.set(phone, rows[0].status);
       return;
     }
   } catch (err) { console.warn('loadConversation error:', err.message); }
@@ -440,7 +444,7 @@ function saveConversation(phone) {
   proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations`, {
     method: 'POST',
     headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ phone, messages, disabled: disabledNumbers.has(phone), updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ phone, messages, disabled: disabledNumbers.has(phone), status: conversationStatus.get(phone) || '', updated_at: new Date().toISOString() }),
   }).then(r => { if (!r.ok) console.warn('saveConversation failed:', r.status); })
     .catch(err => console.warn('saveConversation error:', err.message));
 }
@@ -829,7 +833,7 @@ app.post('/api/agent/chat', requireAuth, async (req, res) => {
     const system = [prompt || '', docText ? `\n\n# Documento de referência:\n${docText}` : ''].join('').trim()
                 || 'Você é um assistente útil.';
     const reply = await callOpenRouter(apiKey, model, system, messages || [{ role: 'user', content: 'Olá' }]);
-    res.json({ ok: true, reply });
+    res.json({ ok: true, reply: (reply || '').replace(/\[STATUS:[^\]]+\]/gi, '').trim() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1103,7 +1107,19 @@ app.post('/api/agent/webhook', async (req, res) => {
       + '- Varie a forma de escrever. Nunca dê duas respostas com a mesma estrutura ou abertura.\n'
       + '- Se a pessoa já se apresentou ou já respondeu algo, não pergunte de novo.\n'
       + '- Se a pessoa não for a decisora, peça com naturalidade o contato (nome e telefone) do dono ou responsável — diga que pode chamar a pessoa diretamente.\n'
-      + '- Se receber uma mensagem tipo "[Enviei o contato de: ...]", significa que a pessoa compartilhou um contato e ele JÁ FOI encaminhado ao nosso time. Agradeça de forma natural e diga que vamos falar com a pessoa indicada.';
+      + '- Se receber uma mensagem tipo "[Enviei o contato de: ...]", significa que a pessoa compartilhou um contato e ele JÁ FOI encaminhado ao nosso time. Agradeça de forma natural e diga que vamos falar com a pessoa indicada.\n'
+      + '\n# Fluxo de qualificação (siga esta ordem, sem pular etapas):\n'
+      + '1. NUNCA convide para reunião logo de primeira. Primeiro qualifique: descubra se a pessoa é decisora, se tem ótica/rede, quantas lojas, se já investe em anúncios.\n'
+      + '2. Conte sobre a Renov naturalmente durante a conversa (assessoria de tráfego pago, 70+ cases como iFood e Coca-Cola, média de 250–300 potenciais clientes/mês para óticas) — em doses pequenas, nunca tudo de uma vez.\n'
+      + '3. Quebre objeções com calma ("já tentei anúncio e não funcionou", "tá caro", "não tenho tempo") usando argumentos do playbook reformulados com suas palavras.\n'
+      + '4. Só ofereça reunião depois que a pessoa demonstrar interesse real e você já souber quem ela é e o tamanho da operação.\n'
+      + '5. Se a pessoa disser que JÁ TEM agência ou assessoria de marketing: agradeça educadamente, deseje sucesso e encerre — NÃO insista, NÃO ofereça reunião.\n'
+      + '\n# Classificação (obrigatório): no FINAL de toda resposta, adicione EXATAMENTE UM marcador invisível:\n'
+      + '- [STATUS:agencia] → a pessoa disse que já tem agência ou assessoria de marketing\n'
+      + '- [STATUS:potencial] → é decisor(a) engajado(a) ou demonstrou interesse real\n'
+      + '- [STATUS:desqualificado] → sem fit: não tem ótica, pediu para parar, sem interesse claro após insistência\n'
+      + '- [STATUS:andamento] → ainda em qualificação\n'
+      + 'O marcador será removido antes do envio — o cliente nunca o verá.';
 
     if (agentConfig.schedulingEnabled) {
       let slotsText = '';
@@ -1142,14 +1158,26 @@ app.post('/api/agent/webhook', async (req, res) => {
     const reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
     if (!reply) return;
 
-    // Adiciona resposta ao histórico e persiste no Supabase
-    history.push({ role: 'assistant', content: reply });
-    if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
-    saveConversation(from);
+    // Extrai marcador de status (classificação do lead) e remove da resposta
+    const statusTag = (reply.match(/\[STATUS:\s*(\w+)\s*\]/i)?.[1] || '').toLowerCase();
+    if (statusTag && statusTag !== 'andamento') {
+      conversationStatus.set(from, statusTag);
+      console.log(`[${ts}] 🏷 ${from} classificado como: ${statusTag}`);
+    }
+    // Lead com agência/assessoria: para de responder automaticamente
+    if (statusTag === 'agencia') {
+      disabledNumbers.add(from);
+      console.log(`[${ts}] 🟠 ${from} tem agência — IA desativada para este contato`);
+    }
 
     // Detecta marcador de agendamento
     const scheduleTag = parseScheduleTag(reply);
-    let cleanReply = reply.replace(/\[AGENDAR:[^\]]+\]/g, '').trim();
+    let cleanReply = reply.replace(/\[AGENDAR:[^\]]+\]/g, '').replace(/\[STATUS:[^\]]+\]/gi, '').trim();
+
+    // Adiciona resposta limpa ao histórico e persiste no Supabase
+    history.push({ role: 'assistant', content: cleanReply });
+    if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+    saveConversation(from);
     let meetLink = null;
 
     if (scheduleTag && agentConfig.schedulingEnabled) {
@@ -1197,7 +1225,7 @@ app.post('/api/agent/webhook', async (req, res) => {
 app.get('/api/agent/conversations', requireAuth, async (req, res) => {
   try {
     if (SUPABASE_URL && SUPABASE_KEY) {
-      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?select=phone,messages,disabled&order=updated_at.desc&limit=50`, { method: 'GET', headers: SB_HEADERS });
+      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?select=phone,messages,disabled,status&order=updated_at.desc&limit=50`, { method: 'GET', headers: SB_HEADERS });
       const rows = await r.json();
       if (r.ok && Array.isArray(rows)) {
         const list = rows.map(row => {
@@ -1207,8 +1235,12 @@ app.get('/api/agent/conversations', requireAuth, async (req, res) => {
             msgCount: msgs.length,
             lastMsg: msgs.filter(m => m.role === 'user').slice(-1)[0]?.content?.slice(0, 60) || '',
             disabled: !!row.disabled,
+            status: row.status || '',
           };
         });
+        // Contatos com agência fixados no topo, depois potenciais
+        const rank = { agencia: 0, potencial: 1, '': 2, andamento: 2, desqualificado: 3 };
+        list.sort((a, b) => (rank[a.status] ?? 2) - (rank[b.status] ?? 2));
         return res.json({ ok: true, conversations: list });
       }
     }
@@ -1221,6 +1253,7 @@ app.get('/api/agent/conversations', requireAuth, async (req, res) => {
       msgCount: msgs.length,
       lastMsg: msgs.filter(m => m.role === 'user').slice(-1)[0]?.content?.slice(0, 60) || '',
       disabled: disabledNumbers.has(phone),
+      status: conversationStatus.get(phone) || '',
     });
   });
   list.sort((a, b) => b.msgCount - a.msgCount);
