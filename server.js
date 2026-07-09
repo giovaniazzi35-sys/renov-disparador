@@ -1159,6 +1159,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (!reply) return;
 
     // Extrai marcador de status (classificação do lead) e remove da resposta
+    const prevStatus = conversationStatus.get(from) || '';
     const statusTag = (reply.match(/\[STATUS:\s*(\w+)\s*\]/i)?.[1] || '').toLowerCase();
     if (statusTag && statusTag !== 'andamento') {
       conversationStatus.set(from, statusTag);
@@ -1168,6 +1169,13 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (statusTag === 'agencia') {
       disabledNumbers.add(from);
       console.log(`[${ts}] 🟠 ${from} tem agência — IA desativada para este contato`);
+    }
+    // Lead qualificado (potencial): encaminha para o grupo Renov Gestão — só na 1ª vez
+    if (statusTag === 'potencial' && prevStatus !== 'potencial') {
+      const leadNome = msgData.pushName || from;
+      await forwardIndication(sendToken,
+        `🟢 *Lead qualificado pelo agente!*\n\n👤 Nome: ${leadNome}\n📱 WhatsApp: ${from}\n\n💬 Última mensagem:\n"${combined.slice(0, 300)}"\n\n✅ Demonstrou interesse — vale acompanhar.`);
+      console.log(`[${ts}] 🟢 ${from} qualificado — enviado ao grupo Renov Gestão`);
     }
 
     // Detecta marcador de agendamento
