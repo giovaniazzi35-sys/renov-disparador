@@ -548,6 +548,65 @@ function extractMsgText(data) {
       || '';
 }
 
+function isAudioMessage(data) {
+  const m = data?.message || {};
+  return !!(m.audioMessage || m.pttMessage || m.documentMessage?.mimetype?.startsWith('audio'));
+}
+
+async function transcribeAudio(data, apiKey) {
+  try {
+    // Tenta obter base64 do áudio via Evolution API
+    const msgKey = data?.key;
+    if (!msgKey || !agentConfig.instanceToken) return null;
+
+    const mediaRes = await proxyFetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage`, {
+      method: 'POST',
+      headers: { apikey: agentConfig.instanceToken },
+      body: JSON.stringify({ key: msgKey, convertToMp4: false }),
+    });
+    if (!mediaRes.ok) return null;
+    const mediaData = await mediaRes.json();
+    const base64 = mediaData?.base64 || mediaData?.data;
+    if (!base64) return null;
+
+    // Transcreve usando Gemini Flash via OpenRouter (suporta áudio em base64)
+    const m = data?.message || {};
+    const mime = m.audioMessage?.mimetype || m.pttMessage?.mimetype || 'audio/ogg; codecs=opus';
+    const cleanMime = mime.split(';')[0].trim();
+
+    const body = JSON.stringify({
+      model: 'google/gemini-flash-1.5',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Transcreva exatamente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.' },
+          { type: 'image_url', image_url: { url: `data:${cleanMime};base64,${base64}` } },
+        ],
+      }],
+      max_tokens: 1000,
+    });
+
+    const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://renov-disparador.vercel.app',
+        'X-Title': 'Renov Agente IA',
+      },
+      body,
+    });
+    const d = await r.json();
+    return d?.choices?.[0]?.message?.content?.trim() || null;
+  } catch (err) {
+    console.error('Transcribe audio error:', err.message);
+    return null;
+  }
+}
+
+// Números com IA desativada manualmente (em memória)
+const disabledNumbers = new Set();
+
 app.get('/api/agent/config', requireAuth, (req, res) => {
   res.json({ ok: true, data: { ...agentConfig, docText: agentConfig.docText ? '(carregado)' : '' } });
 });
@@ -738,17 +797,39 @@ app.post('/api/agent/webhook', async (req, res) => {
     const isGroup = (msgData?.key?.remoteJid || '').includes('@g.us');
     if (isGroup) return;
 
-    const text = extractMsgText(msgData).trim();
-    if (!text) return;
-
     const from = (msgData?.key?.remoteJid || '').replace('@s.whatsapp.net', '');
     if (!from) return;
 
-    const ts = new Date().toTimeString().slice(0, 8);
-    console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 60)}`);
+    // Verifica se IA está desativada para este número
+    if (disabledNumbers.has(from)) return;
 
     const key = agentConfig.openrouterKey;
     if (!key) return;
+
+    const ts = new Date().toTimeString().slice(0, 8);
+    let text = extractMsgText(msgData).trim();
+
+    // Transcreve áudio se necessário
+    if (!text && isAudioMessage(msgData)) {
+      console.log(`[${ts}] 🎙 Áudio recebido de ${from} — transcrevendo...`);
+      const transcription = await transcribeAudio(msgData, key);
+      if (transcription) {
+        text = `[Áudio transcrito]: ${transcription}`;
+        console.log(`[${ts}] 🎙 Transcrição: ${transcription.slice(0, 80)}`);
+      } else {
+        // Sem transcrição disponível — avisa o contato
+        await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+          method: 'POST',
+          headers: { apikey: agentConfig.instanceToken },
+          body: JSON.stringify({ number: from, text: 'Recebi seu áudio! Para agilizar, pode me mandar a mensagem por escrito? 😊', delay: 1500 }),
+        });
+        return;
+      }
+    }
+
+    if (!text) return;
+
+    console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 80)}`);
 
     // Mantém histórico de conversa por contato
     if (!conversationHistory.has(from)) conversationHistory.set(from, []);
@@ -839,6 +920,41 @@ app.post('/api/agent/webhook', async (req, res) => {
   } catch (err) {
     console.error('Agente IA erro:', err.message);
   }
+});
+
+// Lista conversas ativas
+app.get('/api/agent/conversations', requireAuth, (req, res) => {
+  const list = [];
+  conversationHistory.forEach((msgs, phone) => {
+    list.push({
+      phone,
+      msgCount: msgs.length,
+      lastMsg: msgs.filter(m => m.role === 'user').slice(-1)[0]?.content?.slice(0, 60) || '',
+      disabled: disabledNumbers.has(phone),
+    });
+  });
+  list.sort((a, b) => b.msgCount - a.msgCount);
+  res.json({ ok: true, conversations: list });
+});
+
+// Ativa/desativa IA para um número específico
+app.post('/api/agent/conversation-toggle', requireAuth, (req, res) => {
+  const { phone, disabled } = req.body;
+  if (!phone) return res.status(400).json({ error: 'phone obrigatório' });
+  if (disabled) {
+    disabledNumbers.add(phone);
+  } else {
+    disabledNumbers.delete(phone);
+  }
+  res.json({ ok: true, phone, disabled: disabledNumbers.has(phone) });
+});
+
+// Apaga histórico de conversa de um número
+app.delete('/api/agent/conversation/:phone', requireAuth, (req, res) => {
+  const phone = req.params.phone;
+  conversationHistory.delete(phone);
+  disabledNumbers.delete(phone);
+  res.json({ ok: true });
 });
 
 // ── Inicia servidor (apenas localmente — Vercel usa module.exports) ──

@@ -494,6 +494,14 @@
     .playbook-group-btn.active { background:var(--accent-glow); }
     .playbook-group-btn.active .pgb-name { color:var(--accent); }
     .playbook-group-btn:last-child { border-bottom:none; }
+    /* Conversas ativas */
+    .conv-item { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border); }
+    .conv-item:last-child { border-bottom:none; }
+    .conv-phone { font-weight:700;font-size:13px;font-family:monospace; }
+    .conv-preview { font-size:11px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px; }
+    .conv-count { font-size:11px;color:var(--text-3);white-space:nowrap; }
+    .conv-toggle { margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0; }
+    .conv-toggle .toggle-label { font-size:11px; }
     .pgb-name { font-weight:600; }
     .pgb-count { font-size:11px;color:var(--text-3);white-space:nowrap;margin-left:12px; }
     .btn-playbook-quick { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1.5px solid #f59e0b;background:transparent;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s; }
@@ -1150,8 +1158,13 @@
       <!-- Webhook URL -->
       <div class="field">
         <div class="agent-section-title">📡 URL do Webhook</div>
-        <div class="card-sub" style="margin-bottom:8px">Configure esta URL no Evolution Go → Instâncias → Webhook → URL. Evento: <code style="background:var(--card2);padding:1px 5px;border-radius:4px">messages.upsert</code></div>
+        <div class="card-sub" style="margin-bottom:4px">Cole esta URL no Evolution Go → Instâncias → <b>Webhook → URL</b> e ative os eventos abaixo:</div>
         <div class="webhook-url-box" id="webhook-url-box" title="Clique para copiar"></div>
+        <div style="margin-top:10px;background:var(--card2);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.9">
+          <div style="font-weight:700;color:var(--accent);margin-bottom:4px">Eventos a ativar na EVO API:</div>
+          <div>✅ <code>messages.upsert</code> — mensagens recebidas (texto e áudio)</div>
+          <div style="color:var(--text-3);margin-top:4px;font-size:11px">ℹ️ Apenas este evento é necessário. O agente ignora mensagens enviadas por você e grupos automaticamente.</div>
+        </div>
       </div>
 
       <!-- OpenRouter key + modelo -->
@@ -1263,6 +1276,18 @@
         <textarea id="chat-test-input" rows="1" placeholder="Digite uma mensagem de teste..." style="resize:none;flex:1;min-height:40px;max-height:120px"></textarea>
         <button class="btn-primary" id="btn-chat-send" style="padding:10px 18px;flex-shrink:0">➤</button>
       </div>
+    </div>
+
+    <!-- Conversas ativas -->
+    <div class="card" style="margin-top:16px" id="conversations-card">
+      <div class="row-between" style="margin-bottom:12px">
+        <div>
+          <div class="card-title" style="margin-bottom:2px">💬 Conversas ativas</div>
+          <div class="card-sub" style="margin:0">Números que o agente está atendendo. Desative a IA por contato sem parar o agente.</div>
+        </div>
+        <button class="btn-ghost btn-sm" id="btn-refresh-convs">↺ Atualizar</button>
+      </div>
+      <div id="conversations-list"><div style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhuma conversa ainda. O agente registra aqui assim que receber a primeira mensagem.</div></div>
     </div>
 
     <!-- Log de atividade -->
@@ -2657,11 +2682,31 @@ function init() {
 document.addEventListener('DOMContentLoaded', init);
 
 // ============================================================
+// ============================================================
+// PROMPT PADRÃO RENOV
+// ============================================================
+const DEFAULT_AGENT_PROMPT = `Você é um qualificador comercial da Renov Assessoria — especializada em tráfego pago para redes e franquias (70+ cases: iFood, Coca-Cola, Grupo Carreira).
+
+Seu único objetivo: qualificar o lead e marcar uma reunião. Nunca tente vender ou fechar negócio pelo WhatsApp.
+
+Regras:
+- Seja direto, humano e cordial — máximo 3 frases por mensagem
+- Descubra se a pessoa é responsável pelo comercial/marketing
+- Se não for a pessoa certa, peça gentilmente o contato de quem decide
+- Se demonstrar interesse, ofereça 1–2 horários disponíveis para reunião (seg–sex, 11h–17h, horário de Brasília)
+- Na reunião vamos apresentar como geramos em média 250 a 300 potenciais clientes/mês para óticas e redes
+- Se perguntar sobre a Renov: site https://www.renovgestaodigital.com.br/ | Instagram @renovgestaodigital
+- Nunca invente informações. Se não souber, diga que vai verificar.
+- Nunca mencione preços, valores ou propostas — isso é assunto de reunião.
+- Se receber um áudio transcrito com "[Áudio transcrito]:", responda normalmente como se fosse texto.`;
+
+// ============================================================
 // AGENTE IA
 // ============================================================
 const Agent = {
   docText: '',
   pollTimer: null,
+  convPollTimer: null,
   chatHistory: [], // [{role:'user'|'assistant', content:''}]
 
   async loadInstances() {
@@ -2682,6 +2727,37 @@ const Agent = {
     }
   },
 
+  async autoProbeKey() {
+    const key = document.getElementById('agent-or-key').value.trim();
+    if (!key) return;
+    // Só roda se o dropdown ainda tiver as opções estáticas (não foi probeado antes)
+    const sel = document.getElementById('agent-model');
+    const alreadyProbed = sel.options[0]?.text?.includes('✓');
+    if (alreadyProbed) return;
+    const statusEl = document.getElementById('agent-key-status');
+    statusEl.style.color = 'var(--text-3)';
+    statusEl.textContent = '⏳ Verificando modelos disponíveis...';
+    try {
+      const res = await fetch('/api/agent/probe-models', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.workingModel) { statusEl.textContent = '⚠ Chave salva mas nenhum modelo respondeu agora.'; return; }
+      const prevVal = sel.value;
+      sel.innerHTML = '';
+      j.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name + (m.id === j.workingModel ? ' ✓' : '');
+        sel.appendChild(opt);
+      });
+      sel.value = j.workingModel;
+      statusEl.style.color = '#4ade80';
+      statusEl.textContent = `✓ ${j.models.length} modelos carregados. Usando: ${j.workingModel}`;
+    } catch (_) {}
+  },
+
   async loadConfig() {
     try {
       const res = await fetch('/api/agent/config');
@@ -2690,7 +2766,8 @@ const Agent = {
       const d = j.data;
       document.getElementById('agent-instance-select').value = d.instanceName || '';
       document.getElementById('agent-token').value = d.instanceToken || '';
-      document.getElementById('agent-prompt').value = d.prompt || '';
+      // Usa prompt salvo ou injeta o padrão
+      document.getElementById('agent-prompt').value = d.prompt || DEFAULT_AGENT_PROMPT;
       if (d.model) document.getElementById('agent-model').value = d.model;
       if (d.docText === '(carregado)') {
         document.getElementById('agent-doc-name').textContent = '📄 Documento carregado no servidor';
@@ -2999,6 +3076,61 @@ const Agent = {
     errEl.classList.remove('hidden');
   },
 
+  async loadConversations() {
+    try {
+      const res = await fetch('/api/agent/conversations');
+      const j = await res.json();
+      const listEl = document.getElementById('conversations-list');
+      if (!j.ok || !j.conversations.length) {
+        listEl.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhuma conversa ainda. O agente registra aqui assim que receber a primeira mensagem.</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      j.conversations.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'conv-item';
+        item.innerHTML = `
+          <div style="flex:1;min-width:0">
+            <div class="conv-phone">📱 ${esc(c.phone)}</div>
+            <div class="conv-preview">${esc(c.lastMsg || '—')}</div>
+          </div>
+          <div class="conv-count">${c.msgCount} msgs</div>
+          <div class="conv-toggle">
+            <span style="font-size:11px;color:${c.disabled ? '#f87171' : '#4ade80'}">${c.disabled ? 'IA off' : 'IA on'}</span>
+            <label class="toggle-label" style="gap:4px">
+              <input type="checkbox" ${c.disabled ? '' : 'checked'} data-phone="${esc(c.phone)}" class="conv-ai-toggle" />
+              <span class="toggle-switch"></span>
+            </label>
+            <button class="btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" data-del="${esc(c.phone)}" title="Apagar histórico">🗑</button>
+          </div>`;
+        listEl.appendChild(item);
+      });
+
+      listEl.querySelectorAll('.conv-ai-toggle').forEach(chk => {
+        chk.onchange = async () => {
+          const phone = chk.dataset.phone;
+          await fetch('/api/agent/conversation-toggle', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, disabled: !chk.checked }),
+          });
+          this.loadConversations();
+        };
+      });
+      listEl.querySelectorAll('[data-del]').forEach(btn => {
+        btn.onclick = async () => {
+          if (!confirm(`Apagar histórico de ${btn.dataset.del}?`)) return;
+          await fetch(`/api/agent/conversation/${encodeURIComponent(btn.dataset.del)}`, { method: 'DELETE' });
+          this.loadConversations();
+        };
+      });
+    } catch (_) {}
+  },
+
+  startConvPoll() {
+    if (this.convPollTimer) return;
+    this.convPollTimer = setInterval(() => this.loadConversations(), 15000);
+  },
+
   addLog(text, type) {
     const log = document.getElementById('agent-log');
     const first = log.querySelector('[style*="text-3"]');
@@ -3077,8 +3209,12 @@ const Agent = {
       document.getElementById('agent-instance-label').textContent = e.target.value ? '📱 ' + e.target.value : '';
     };
 
+    document.getElementById('btn-refresh-convs').onclick = () => this.loadConversations();
+
     this.loadInstances();
     this.loadConfig();
+    this.loadConversations();
+    this.startConvPoll();
   }
 };
 
@@ -3095,6 +3231,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('panel-disparador').classList.add('hidden');
     document.getElementById('tab-agente').classList.add('active');
     document.getElementById('tab-disparador').classList.remove('active');
+    Agent.autoProbeKey();
+    Agent.loadConversations();
   };
   Agent.init();
 
