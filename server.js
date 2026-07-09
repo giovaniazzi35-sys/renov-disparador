@@ -616,6 +616,12 @@ async function transcribeAudio(data, apiKey) {
 // Números com IA desativada manualmente (em memória)
 const disabledNumbers = new Set();
 
+// Endpoint de debug — mostra últimos payloads recebidos no webhook (sem auth para facilitar debug)
+const webhookLog = [];
+app.get('/api/agent/webhook-log', requireAuth, (req, res) => {
+  res.json({ ok: true, log: webhookLog.slice(-20) });
+});
+
 app.get('/api/agent/config', requireAuth, (req, res) => {
   res.json({ ok: true, data: { ...agentConfig, docText: agentConfig.docText ? '(carregado)' : '' } });
 });
@@ -801,16 +807,31 @@ app.post('/api/agent/toggle', requireAuth, (req, res) => {
 app.post('/api/agent/webhook', async (req, res) => {
   res.status(200).json({ ok: true }); // responde imediatamente
   try {
-    if (!agentConfig.active || !agentConfig.instanceToken) return;
+    // Salva payload bruto para debug
+    const rawEvent = req.body?.event || req.body?.type || '';
+    webhookLog.push({ ts: new Date().toISOString(), event: rawEvent, body: JSON.stringify(req.body).slice(0, 500) });
+    if (webhookLog.length > 30) webhookLog.shift();
+    console.log(`[WEBHOOK] event="${rawEvent}" keys=${Object.keys(req.body || {}).join(',')}`);
 
-    const event = req.body?.event || req.body?.type || '';
-    // Só processa novas mensagens recebidas — ignora updates de status, mensagens enviadas, etc.
-    if (event !== 'messages.upsert') return;
+    if (!agentConfig.active || !agentConfig.instanceToken) {
+      console.log(`[WEBHOOK] ignorado — active=${agentConfig.active} token=${!!agentConfig.instanceToken}`);
+      return;
+    }
 
-    // Normaliza data — Evolution Go às vezes envia array
+    // Evolution Go usa "MESSAGE"; Evolution JS usa "messages.upsert" — aceita ambos
+    const ev = rawEvent.toUpperCase().replace(/[.\-_]/g, '');
+    const isMessageEvent = ev === 'MESSAGE' || ev === 'MESSAGESUPSERT' || ev === 'MESSAGES';
+    if (!isMessageEvent) {
+      console.log(`[WEBHOOK] evento ignorado: ${rawEvent}`);
+      return;
+    }
+
+    // Normaliza data — pode ser objeto ou array
     const rawData = req.body?.data;
     const msgData = Array.isArray(rawData) ? rawData[0] : (rawData || req.body?.messages?.[0] || req.body);
     if (!msgData || typeof msgData !== 'object') return;
+
+    console.log(`[WEBHOOK] fromMe=${msgData?.key?.fromMe} jid=${msgData?.key?.remoteJid} type=${msgData?.messageType}`);
 
     // Skip mensagens enviadas por nós
     if (msgData?.key?.fromMe) return;
