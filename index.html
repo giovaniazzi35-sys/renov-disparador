@@ -626,17 +626,22 @@
     .btn-toggle-agent.deactivate { background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#f87171; }
     .agent-instance-label { font-size:12px; color:var(--text-3); margin-left:auto; }
     .agent-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-3); margin-bottom:10px; margin-top:20px; }
+    /* Layout 2 colunas do agente */
+    .agent-two-col { display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px; }
+    @media(max-width:560px){ .agent-two-col { grid-template-columns:1fr; } }
+    /* Webhook compacto */
+    .agent-webhook-row { display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap; }
+    .agent-webhook-label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);white-space:nowrap; }
+    .agent-webhook-tip { font-size:11px;color:var(--text-3);white-space:nowrap; }
     /* Playbook cards do agente */
-    .agent-pb-card { display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;background:var(--card2); }
+    .agent-pb-card { display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--border);border-radius:12px;cursor:pointer;transition:all .18s;background:var(--card2);position:relative; }
     .agent-pb-card:hover { border-color:var(--accent);background:var(--accent-glow); }
-    .agent-pb-card.selected { border-color:var(--accent);background:rgba(45,212,191,.08); }
-    .agent-pb-card input[type=radio] { display:none; }
-    .agent-pb-dot { width:16px;height:16px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;transition:all .15s; }
-    .agent-pb-card.selected .agent-pb-dot { border-color:var(--accent);background:var(--accent); }
-    .agent-pb-info { flex:1;min-width:0; }
-    .agent-pb-name { font-weight:700;font-size:13px; }
-    .agent-pb-desc { font-size:11px;color:var(--text-3);margin-top:2px; }
-    .agent-pb-count { font-size:11px;color:var(--accent);white-space:nowrap;flex-shrink:0; }
+    .agent-pb-card.selected { border-color:var(--accent);background:rgba(45,212,191,.07); }
+    .agent-pb-card.selected::after { content:'✓';position:absolute;top:10px;right:12px;color:var(--accent);font-size:16px;font-weight:900; }
+    .agent-pb-icon { font-size:28px;line-height:1; }
+    .agent-pb-name { font-weight:800;font-size:14px;color:var(--text); }
+    .agent-pb-desc { font-size:12px;color:var(--text-3);line-height:1.5; }
+    .agent-pb-count { font-size:11px;color:var(--accent);font-weight:700;margin-top:4px; }
     /* Toggle switch genérico usado no Agente IA */
     .toggle-label { display:inline-flex;align-items:center;gap:8px;cursor:pointer; }
     .toggle-label input[type=checkbox] { display:none; }
@@ -1132,58 +1137,51 @@
       <span class="agent-instance-label" id="agent-instance-label"></span>
     </div>
 
+    <!-- ── Bloco 1: Conexão WhatsApp ── -->
     <div class="card">
-      <div class="card-title">Configuração do Agente</div>
-      <div class="card-sub">O agente responde automaticamente as mensagens recebidas no WhatsApp com base no prompt e documento de treinamento.</div>
-
-      <!-- Instância -->
-      <div class="field">
-        <label class="field-label">Instância do WhatsApp</label>
-        <div class="instance-row">
-          <select id="agent-instance-select">
-            <option value="">— Selecione a instância —</option>
-          </select>
-          <button class="btn-ghost btn-sm" id="btn-agent-load-instances">↺ Carregar</button>
+      <div class="card-title">📱 Conexão WhatsApp</div>
+      <div class="agent-two-col">
+        <div class="field" style="margin:0">
+          <label class="field-label">Instância</label>
+          <div class="instance-row">
+            <select id="agent-instance-select"><option value="">— Selecione —</option></select>
+            <button class="btn-ghost btn-sm" id="btn-agent-load-instances" title="Recarregar instâncias">↺</button>
+          </div>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label">Token da instância</label>
+          <div class="token-row">
+            <input type="password" id="agent-token" placeholder="Token da instância" />
+            <button class="btn-icon" id="btn-agent-toggle-token">👁</button>
+          </div>
         </div>
       </div>
 
-      <div class="field">
-        <label class="field-label">Token da instância</label>
-        <div class="token-row">
-          <input type="password" id="agent-token" placeholder="Token da instância selecionada" />
-          <button class="btn-icon" id="btn-agent-toggle-token">👁</button>
-        </div>
+      <!-- Webhook compacto -->
+      <div class="agent-webhook-row">
+        <span class="agent-webhook-label">📡 Webhook</span>
+        <div class="webhook-url-box" id="webhook-url-box" title="Clique para copiar" style="flex:1;margin:0"></div>
+        <div class="agent-webhook-tip">evento: <code>messages.upsert</code></div>
       </div>
+    </div>
 
-      <!-- Seletor de Playbook -->
-      <div class="field">
-        <label class="field-label">Playbook do agente <span style="color:var(--text-3);font-weight:400">— define o contexto e estilo de resposta da IA</span></label>
-        <div id="agent-playbook-cards" style="display:flex;flex-direction:column;gap:8px;margin-top:4px"></div>
-        <details style="margin-top:10px">
-          <summary style="cursor:pointer;font-size:12px;color:var(--text-3);user-select:none">⚙ Ver / editar prompt gerado</summary>
-          <textarea id="agent-prompt" rows="10" style="margin-top:8px;min-height:160px;resize:vertical;font-size:12px"></textarea>
-        </details>
-      </div>
-
-      <!-- campo oculto — mantido para compatibilidade com readDoc (não exibido) -->
+    <!-- ── Bloco 2: Playbook ── -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">🎯 Playbook de Atuação</div>
+      <div class="card-sub">Selecione qual conjunto de mensagens o agente deve usar como contexto para responder os leads.</div>
+      <div id="agent-playbook-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"></div>
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--text-3);user-select:none;padding:6px 0">⚙ Ver / editar prompt gerado pelo playbook</summary>
+        <textarea id="agent-prompt" rows="10" style="margin-top:8px;min-height:160px;resize:vertical;font-size:11.5px;font-family:monospace"></textarea>
+      </details>
       <input type="file" id="agent-doc-file" accept=".pdf,.txt,.md" style="display:none" />
-      <div class="inline-err hidden" id="agent-doc-err"></div>
+    </div>
 
-      <!-- Webhook URL -->
+    <!-- ── Bloco 3: IA ── -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">🤖 Modelo de IA</div>
       <div class="field">
-        <div class="agent-section-title">📡 URL do Webhook</div>
-        <div class="card-sub" style="margin-bottom:4px">Cole esta URL no Evolution Go → Instâncias → <b>Webhook → URL</b> e ative os eventos abaixo:</div>
-        <div class="webhook-url-box" id="webhook-url-box" title="Clique para copiar"></div>
-        <div style="margin-top:10px;background:var(--card2);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.9">
-          <div style="font-weight:700;color:var(--accent);margin-bottom:4px">Eventos a ativar na EVO API:</div>
-          <div>✅ <code>messages.upsert</code> — mensagens recebidas (texto e áudio)</div>
-          <div style="color:var(--text-3);margin-top:4px;font-size:11px">ℹ️ Apenas este evento é necessário. O agente ignora mensagens enviadas por você e grupos automaticamente.</div>
-        </div>
-      </div>
-
-      <!-- OpenRouter key + modelo -->
-      <div class="field">
-        <label class="field-label">Chave da API OpenRouter</label>
+        <label class="field-label">Chave da API OpenRouter <span style="font-weight:400;color:var(--text-3)">— gratuito em openrouter.ai → Keys</span></label>
         <div style="display:flex;gap:8px;align-items:center">
           <div class="token-row" style="flex:1">
             <input type="password" id="agent-or-key" placeholder="sk-or-v1-..." />
@@ -1191,83 +1189,66 @@
           </div>
           <button class="btn-ghost btn-sm" id="btn-agent-test-key" style="white-space:nowrap">🔬 Testar</button>
         </div>
-        <div id="agent-key-status" style="font-size:12px;margin-top:6px;color:var(--text-3)">Obtenha gratuitamente em <b style="color:var(--accent)">openrouter.ai</b> → Keys</div>
+        <div id="agent-key-status" style="font-size:12px;margin-top:6px;color:var(--text-3)">Insira a chave e clique em Testar, ou salve e o sistema testa automaticamente.</div>
       </div>
-
       <div class="field">
-        <label class="field-label">Modelo de IA</label>
+        <label class="field-label">Modelo selecionado</label>
         <select id="agent-model">
           <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek Chat V3 — excelente qualidade, gratuito</option>
-          <option value="google/gemma-3-27b-it:free">Gemma 3 27B — Google, qualidade alta, gratuito</option>
-          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — Meta, muito bom, gratuito</option>
+          <option value="google/gemma-3-27b-it:free">Gemma 3 27B — Google, gratuito</option>
+          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — Meta, gratuito</option>
           <option value="qwen/qwen3-8b:free">Qwen3 8B — rápido, gratuito</option>
-          <option value="mistralai/mistral-7b-instruct:free">Mistral 7B — leve e rápido, gratuito</option>
+          <option value="mistralai/mistral-7b-instruct:free">Mistral 7B — leve, gratuito</option>
         </select>
       </div>
+    </div>
 
-      <!-- Google Agenda -->
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:12px">
-        <div class="row-between" style="margin-bottom:12px">
-          <span style="font-weight:600;font-size:15px">📅 Agendamento — Google Agenda</span>
-          <label class="toggle-label" style="gap:8px">
-            <input type="checkbox" id="agent-scheduling-enabled" />
-            <span class="toggle-switch"></span>
-            <span style="font-size:13px">Ativar</span>
-          </label>
-        </div>
-
-        <div id="calendar-fields" style="display:none">
-
-          <!-- Status de conexão Google -->
-          <div id="google-connected-box" style="display:none;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
-            <span style="font-size:20px">✅</span>
-            <div style="flex:1">
-              <div style="font-weight:600;font-size:13px;color:#4ade80">Conectado ao Google</div>
-              <div id="google-connected-email" style="font-size:12px;color:var(--text-2)"></div>
-            </div>
-            <button class="btn-secondary" id="btn-google-disconnect" style="font-size:12px;padding:4px 10px">Desconectar</button>
-          </div>
-
-          <div id="google-login-box">
-            <details style="margin-bottom:10px;background:var(--bg-2);border-radius:8px;padding:10px">
-              <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-2)">🔧 Como configurar (faça uma vez)</summary>
-              <div style="font-size:12px;line-height:1.8;margin-top:10px;color:var(--text-2)">
-                <b>1.</b> Acesse <b>console.cloud.google.com</b> → Crie um projeto → Ative a <b>Google Calendar API</b><br>
-                <b>2.</b> Vá em <b>APIs e Serviços → Credenciais → Criar credenciais → OAuth 2.0</b><br>
-                &nbsp;&nbsp;&nbsp;Tipo: <b>Aplicativo da Web</b> → Adicione esta URI de redirecionamento:<br>
-                <code id="oauth-redirect-uri" style="display:block;background:#0003;padding:4px 8px;border-radius:4px;margin:4px 0;word-break:break-all;font-size:11px"></code>
-                <b>3.</b> Copie o <b>Client ID</b> e o <b>Client Secret</b>, cole abaixo e clique em <b>Salvar configuração</b><br>
-                <b>4.</b> Clique em <b>Login com Google</b> e autorize o acesso ao calendário
-              </div>
-            </details>
-
-            <div class="field">
-              <label class="field-label">Client ID</label>
-              <input type="text" id="agent-google-client-id" placeholder="12345-abc.apps.googleusercontent.com" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label class="field-label">Client Secret</label>
-              <input type="password" id="agent-google-client-secret" placeholder="GOCSPX-..." autocomplete="new-password" />
-            </div>
-
-            <button class="btn-primary" id="btn-google-login" style="width:100%;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px">
-              <svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-              Login com Google
-            </button>
-          </div>
-
-          <div style="margin-top:10px">
-            <div style="display:flex;gap:8px;align-items:center">
-              <button class="btn-secondary" id="btn-test-calendar" style="flex:1">🗓 Testar calendário</button>
-            </div>
-            <div id="calendar-test-status" style="font-size:12px;margin-top:6px;min-height:18px"></div>
-          </div>
-        </div>
+    <!-- ── Bloco 4: Google Agenda (colapsável) ── -->
+    <div class="card" style="margin-top:12px">
+      <div class="row-between" style="cursor:pointer" id="calendar-header">
+        <div class="card-title" style="margin:0">📅 Agendamento — Google Agenda</div>
+        <label class="toggle-label" style="gap:8px" onclick="event.stopPropagation()">
+          <input type="checkbox" id="agent-scheduling-enabled" />
+          <span class="toggle-switch"></span>
+          <span style="font-size:13px">Ativar</span>
+        </label>
       </div>
-
-      <div style="display:flex;gap:10px;margin-top:8px">
-        <button class="btn-primary btn-lg" id="btn-agent-save" style="flex:1">💾 Salvar configuração</button>
+      <div id="calendar-fields" style="display:none;margin-top:14px">
+        <div id="google-connected-box" style="display:none;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;align-items:center;gap:10px">
+          <span style="font-size:20px">✅</span>
+          <div style="flex:1"><div style="font-weight:600;font-size:13px;color:#4ade80">Conectado ao Google</div><div id="google-connected-email" style="font-size:12px;color:var(--text-2)"></div></div>
+          <button class="btn-secondary" id="btn-google-disconnect" style="font-size:12px;padding:4px 10px">Desconectar</button>
+        </div>
+        <div id="google-login-box">
+          <details style="margin-bottom:10px;background:var(--card2);border-radius:8px;padding:10px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-2)">🔧 Como configurar (faça uma vez)</summary>
+            <div style="font-size:12px;line-height:1.8;margin-top:10px;color:var(--text-2)">
+              <b>1.</b> <b>console.cloud.google.com</b> → Crie um projeto → Ative <b>Google Calendar API</b><br>
+              <b>2.</b> APIs e Serviços → Credenciais → OAuth 2.0 → Tipo: <b>Aplicativo da Web</b><br>
+              &nbsp;&nbsp;&nbsp;URI de redirecionamento autorizado:<br>
+              <code id="oauth-redirect-uri" style="display:block;background:#0003;padding:4px 8px;border-radius:4px;margin:4px 0;word-break:break-all;font-size:11px"></code>
+              <b>3.</b> Cole Client ID e Secret abaixo → Salvar → <b>Login com Google</b>
+            </div>
+          </details>
+          <div class="agent-two-col">
+            <div class="field" style="margin:0"><label class="field-label">Client ID</label><input type="text" id="agent-google-client-id" placeholder="12345-abc.apps.googleusercontent.com" autocomplete="off" /></div>
+            <div class="field" style="margin:0"><label class="field-label">Client Secret</label><input type="password" id="agent-google-client-secret" placeholder="GOCSPX-..." autocomplete="new-password" /></div>
+          </div>
+          <button class="btn-primary" id="btn-google-login" style="width:100%;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px">
+            <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+            Login com Google
+          </button>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+          <button class="btn-secondary" id="btn-test-calendar" style="flex:1">🗓 Testar conexão com calendário</button>
+        </div>
+        <div id="calendar-test-status" style="font-size:12px;margin-top:6px;min-height:18px"></div>
       </div>
+    </div>
+
+    <!-- ── Save ── -->
+    <div style="margin-top:12px">
+      <button class="btn-primary btn-lg" id="btn-agent-save" style="width:100%">💾 Salvar configuração</button>
     </div>
 
     <!-- Chat de teste -->
@@ -2714,12 +2695,17 @@ Regras:
 - Nunca mencione preços, valores ou propostas — isso é assunto de reunião.
 - Se receber um áudio transcrito com "[Áudio transcrito]:", responda normalmente como se fosse texto.`;
 
+// Apenas os 2 playbooks enviados pelo usuário ficam disponíveis no agente
+const AGENT_PLAYBOOKS = [
+  { label: 'Guia 1 – Óticas', icon: '👓', desc: 'Foco em óticas — previsibilidade de 250–300 clientes/mês. Tom consultivo e direto.', msgs: PLAYBOOK_GUIA1 },
+  { label: '8 Mais Diretas',   icon: '⚡', desc: 'Abordagem direta para redes de óticas e franquias. Perguntas objetivas, sem rodeios.', msgs: PLAYBOOK_DIRETAS },
+];
+
 // Gera prompt do agente baseado no playbook selecionado
 function buildAgentPrompt(playbookIdx) {
-  const group = PLAYBOOK_GROUPS[playbookIdx];
-  const msgs = group ? group.msgs : PLAYBOOK_GROUPS[0].msgs;
-  const examples = msgs.map((m, i) => `[Modelo ${i + 1}]\n${m.text}`).join('\n\n');
-  return DEFAULT_AGENT_PROMPT + `\n\n# Playbook ativo: "${group ? group.label : PLAYBOOK_GROUPS[0].label}"\nAs mensagens abaixo foram enviadas aos prospects. Use-as como referência de tom, contexto e proposta de valor ao responder:\n\n${examples}`;
+  const group = AGENT_PLAYBOOKS[playbookIdx] || AGENT_PLAYBOOKS[0];
+  const examples = group.msgs.map((m, i) => `[Modelo ${i + 1}]\n${m.text}`).join('\n\n');
+  return DEFAULT_AGENT_PROMPT + `\n\n# Playbook ativo: "${group.label}"\nAs mensagens abaixo foram enviadas aos prospects. Use-as como referência de tom, contexto e proposta de valor ao responder:\n\n${examples}`;
 }
 
 // ============================================================
@@ -2752,16 +2738,14 @@ const Agent = {
 
   initPlaybookCards() {
     const container = document.getElementById('agent-playbook-cards');
-    PLAYBOOK_GROUPS.forEach((group, idx) => {
-      const card = document.createElement('label');
+    AGENT_PLAYBOOKS.forEach((group, idx) => {
+      const card = document.createElement('div');
       card.className = 'agent-pb-card' + (idx === 0 ? ' selected' : '');
       card.innerHTML = `
-        <div class="agent-pb-dot"></div>
-        <div class="agent-pb-info">
-          <div class="agent-pb-name">${esc(group.label)}</div>
-          <div class="agent-pb-desc">${idx === 0 ? 'Playbook geral — redes e franquias' : idx === 1 ? 'Foco em óticas — previsibilidade de clientes' : 'Abordagem direta e objetiva — óticas e redes'}</div>
-        </div>
-        <div class="agent-pb-count">${group.msgs.length} modelos</div>`;
+        <div class="agent-pb-icon">${group.icon}</div>
+        <div class="agent-pb-name">${esc(group.label)}</div>
+        <div class="agent-pb-desc">${esc(group.desc)}</div>
+        <div class="agent-pb-count">${group.msgs.length} variações de mensagem</div>`;
       card.onclick = () => this.selectPlaybook(idx, true);
       container.appendChild(card);
     });
