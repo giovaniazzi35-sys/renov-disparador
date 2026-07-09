@@ -651,6 +651,24 @@ function isAudioMessage(data) {
   return !!(m.audioMessage || m.pttMessage || m.documentMessage?.mimetype?.startsWith('audio'));
 }
 
+// Número que recebe os contatos indicados pelos leads (donos de ótica / responsáveis)
+const CONTACT_FORWARD_NUMBER = '5511970799985';
+
+// Extrai contatos compartilhados (vCard) da mensagem
+function extractContacts(data) {
+  const m = data?.message || {};
+  const list = [];
+  const push = (c) => {
+    if (!c) return;
+    const tel = ((c.vcard || '').match(/TEL[^:]*:([+\d\s().-]+)/i)?.[1] || '').replace(/\D/g, '');
+    const name = c.displayName || ((c.vcard || '').match(/FN:(.+)/i)?.[1] || '').trim();
+    if (name || tel) list.push({ name: name || 'Sem nome', phone: tel || 'sem telefone' });
+  };
+  push(m.contactMessage);
+  (m.contactsArrayMessage?.contacts || []).forEach(push);
+  return list;
+}
+
 // Busca o base64 do áudio: primeiro no próprio payload (Evolution Go pode embutir),
 // depois via endpoint de mídia da Evolution API
 async function getAudioBase64(data, rawPayload, token) {
@@ -983,6 +1001,26 @@ app.post('/api/agent/webhook', async (req, res) => {
       }
     }
 
+    // Contato compartilhado (vCard) — encaminha para o responsável e avisa o modelo
+    const sharedContacts = extractContacts(msgData);
+    if (sharedContacts.length) {
+      const senderName = msgData.pushName || from;
+      for (const c of sharedContacts) {
+        await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+          method: 'POST',
+          headers: { apikey: sendToken },
+          body: JSON.stringify({
+            number: CONTACT_FORWARD_NUMBER,
+            text: `📇 *Indicação recebida pelo agente*\n\n👤 Nome: ${c.name}\n📱 Telefone: ${c.phone}\n\n🔁 Indicado por: ${senderName} (${from})`,
+            delay: 1000,
+          }),
+        });
+        console.log(`[${ts}] 📇 Contato encaminhado para ${CONTACT_FORWARD_NUMBER}: ${c.name} ${c.phone}`);
+      }
+      const desc = sharedContacts.map(c => `${c.name} (${c.phone})`).join(', ');
+      text = text ? `${text}\n[Enviei o contato de: ${desc}]` : `[Enviei o contato de: ${desc}]`;
+    }
+
     if (!text) {
       console.log(`[WEBHOOK] sem texto extraível — message=${JSON.stringify(msgData.message || {}).slice(0, 300)}`);
       return;
@@ -1016,11 +1054,17 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     // Monta system prompt — injeta slots disponíveis se agendamento ativo
     let sysBase = [agentConfig.prompt || '', agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''].join('').trim();
+    const leadName = (msgData.pushName || '').trim();
     sysBase += '\n\nIMPORTANTE:\n'
+      + (leadName ? `- O nome do contato no WhatsApp é "${leadName}". Chame-o pelo primeiro nome de forma natural. Se ele se apresentar com outro nome durante a conversa, passe a usar o nome que ele informou.\n` : '- Se o contato informar o nome dele, use-o nas respostas seguintes.\n')
       + '- A mensagem do usuário pode conter várias mensagens juntas (separadas por quebra de linha). Responda tudo em UMA única resposta curta e objetiva — máximo 3 frases.\n'
       + '- NUNCA repita uma saudação ou mensagem que você já enviou nesta conversa. Leia o histórico e continue de onde parou.\n'
-      + '- Responda diretamente ao que a pessoa disse, de forma natural e humana, como num papo de WhatsApp. Nada de textos genéricos ou robotizados.\n'
-      + '- Se a pessoa já se apresentou ou já respondeu algo, não pergunte de novo.';
+      + '- Você é um SDR humano profissional, não uma IA. O material do playbook é APENAS apoio e referência de argumentos — nunca copie frases prontas dele. Reformule tudo com suas palavras, adaptando ao contexto do que a pessoa disse.\n'
+      + '- Responda diretamente ao que a pessoa disse, em tom natural de WhatsApp: frases curtas, linguagem do dia a dia, sem formalidade excessiva, sem listas, sem emojis em excesso (no máximo 1 por mensagem, e nem sempre).\n'
+      + '- Varie a forma de escrever. Nunca dê duas respostas com a mesma estrutura ou abertura.\n'
+      + '- Se a pessoa já se apresentou ou já respondeu algo, não pergunte de novo.\n'
+      + '- Se a pessoa não for a decisora, peça com naturalidade o contato (nome e telefone) do dono ou responsável — diga que pode chamar a pessoa diretamente.\n'
+      + '- Se receber uma mensagem tipo "[Enviei o contato de: ...]", significa que a pessoa compartilhou um contato e ele JÁ FOI encaminhado ao nosso time. Agradeça de forma natural e diga que vamos falar com a pessoa indicada.';
 
     if (agentConfig.schedulingEnabled) {
       let slotsText = '';
