@@ -2790,7 +2790,10 @@ const Agent = {
 
       this.updateBadge(d.active);
       const savedKey = localStorage.getItem('agent_or_key');
-      if (savedKey) document.getElementById('agent-or-key').value = savedKey;
+      if (savedKey) {
+        document.getElementById('agent-or-key').value = savedKey;
+        this.autoProbeKey(); // dispara probe automaticamente ao carregar
+      }
     } catch (_) {}
   },
 
