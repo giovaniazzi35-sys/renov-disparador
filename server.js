@@ -524,29 +524,50 @@ async function createCalendarEvent(accessToken, calendarId, slotUtc, clientPhone
   return data?.conferenceData?.entryPoints?.[0]?.uri || data?.hangoutLink || null;
 }
 
+// Modelos gratuitos de reserva — se o escolhido falhar, tenta o próximo
+const FALLBACK_MODELS = [
+  'deepseek/deepseek-chat-v3-0324:free',
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'qwen/qwen-2.5-72b-instruct:free',
+];
+
 async function callOpenRouter(apiKey, model, systemPrompt, messages) {
-  const body = JSON.stringify({
-    model: model || 'deepseek/deepseek-chat-v3-0324:free',
-  temperature: 0.7,
-    max_tokens: 400,
-    messages: [
-      { role: 'system', content: systemPrompt || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.' },
-      ...messages,
-    ],
-  });
-  const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://renov-disparador.vercel.app',
-      'X-Title': 'Renov Agente IA',
-    },
-    body,
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data?.error?.message || `OpenRouter ${r.status}`);
-  return data?.choices?.[0]?.message?.content || '';
+  const primary = model || FALLBACK_MODELS[0];
+  const chain = [primary, ...FALLBACK_MODELS.filter(m => m !== primary)];
+  const msgPayload = [
+    { role: 'system', content: systemPrompt || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.' },
+    ...messages,
+  ];
+
+  let lastErr = null;
+  for (const m of chain) {
+    try {
+      const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://renov-disparador.vercel.app',
+          'X-Title': 'Renov Agente IA',
+        },
+        body: JSON.stringify({ model: m, temperature: 0.7, max_tokens: 400, messages: msgPayload }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error?.message || `OpenRouter ${r.status}`);
+      const reply = data?.choices?.[0]?.message?.content || '';
+      if (reply) {
+        if (m !== primary) console.log(`[OPENROUTER] fallback usado: ${m} (primário ${primary} falhou)`);
+        return reply;
+      }
+      lastErr = new Error(`Modelo ${m} retornou resposta vazia`);
+    } catch (err) {
+      console.warn(`[OPENROUTER] ${m} falhou: ${err.message}`);
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('Nenhum modelo respondeu');
 }
 
 // Evolution Go (whatsmeow) envia { Info: {Chat, Sender, IsFromMe, IsGroup, ID, Type}, Message: {...} }
