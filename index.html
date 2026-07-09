@@ -496,6 +496,8 @@
     .playbook-group-btn:last-child { border-bottom:none; }
     .pgb-name { font-weight:600; }
     .pgb-count { font-size:11px;color:var(--text-3);white-space:nowrap;margin-left:12px; }
+    .btn-playbook-quick { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1.5px solid #f59e0b;background:transparent;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s; }
+    .btn-playbook-quick:hover { background:rgba(245,158,11,.12); }
 
     /* ── Dispatch ── */
     .dispatch-big-btn { width: 100%; justify-content: center; margin-bottom: 20px; }
@@ -887,6 +889,7 @@
           <button class="btn-playbook" id="btn-playbook">💡 <span id="playbook-label">Variações do Playbook</span></button>
           <div class="playbook-menu hidden" id="playbook-menu"></div>
         </div>
+        <button class="btn-playbook-quick" id="btn-playbook-diretas">⚡ 8 Mais Diretas</button>
         <button class="btn-ghost btn-sm" id="btn-preview">👁 Pré-visualizar</button>
       </div>
 
@@ -2594,6 +2597,7 @@ function init() {
     e.stopPropagation();
     playbookMenu.classList.toggle('hidden');
   };
+  document.getElementById('btn-playbook-diretas').onclick = () => selectPlaybook(2);
   document.addEventListener('click', () => playbookMenu.classList.add('hidden'));
 
   // Sender name field
