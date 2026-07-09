@@ -489,7 +489,13 @@
     .playbook-item:last-child { border-bottom:none; }
     .pi-title { font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px; }
     .pi-preview { color:var(--text-2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    .playbook-group-header { padding:7px 14px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-3);background:var(--card2);border-bottom:1px solid var(--border);position:sticky;top:0; }
+    .playbook-group-btn { display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 16px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:13px;cursor:pointer;text-align:left;transition:background .12s; }
+    .playbook-group-btn:hover { background:var(--card2); }
+    .playbook-group-btn.active { background:var(--accent-glow); }
+    .playbook-group-btn.active .pgb-name { color:var(--accent); }
+    .playbook-group-btn:last-child { border-bottom:none; }
+    .pgb-name { font-weight:600; }
+    .pgb-count { font-size:11px;color:var(--text-3);white-space:nowrap;margin-left:12px; }
 
     /* ── Dispatch ── */
     .dispatch-big-btn { width: 100%; justify-content: center; margin-bottom: 20px; }
@@ -878,7 +884,7 @@
 
       <div class="row-end" style="gap:8px">
         <div class="playbook-dropdown" id="playbook-dropdown">
-          <button class="btn-playbook" id="btn-playbook">💡 Variações do Playbook</button>
+          <button class="btn-playbook" id="btn-playbook">💡 <span id="playbook-label">Variações do Playbook</span></button>
           <div class="playbook-menu hidden" id="playbook-menu"></div>
         </div>
         <button class="btn-ghost btn-sm" id="btn-preview">👁 Pré-visualizar</button>
@@ -2553,29 +2559,37 @@ function init() {
   };
   document.getElementById('btn-add-media').onclick = () => MediaItems.add();
 
-  // Playbook dropdown
+  // Playbook dropdown — seleciona o grupo; carrega todas as variações do grupo
   const playbookMenu = document.getElementById('playbook-menu');
-  PLAYBOOK_GROUPS.forEach(group => {
-    const header = document.createElement('div');
-    header.className = 'playbook-group-header';
-    header.textContent = group.label;
-    playbookMenu.appendChild(header);
-    group.msgs.forEach(m => {
-      const btn = document.createElement('button');
-      btn.className = 'playbook-item';
-      btn.innerHTML = `<div class="pi-title">${esc(m.title)}</div><div class="pi-preview">${esc(m.text.split('\n')[0])}</div>`;
-      btn.onclick = () => {
-        document.getElementById('toggle-variations').checked = true;
-        Message.onToggle(true);
-        AppState.variations = group.msgs.map(x => x.text);
-        Message.renderVariations();
-        document.getElementById('main-message').value = m.text;
-        document.getElementById('main-char-count').textContent = `${m.text.length} caracteres`;
-        playbookMenu.classList.add('hidden');
-      };
-      playbookMenu.appendChild(btn);
+  const playbookLabel = document.getElementById('playbook-label');
+  let activePlaybookIndex = -1;
+
+  function selectPlaybook(idx) {
+    activePlaybookIndex = idx;
+    const group = PLAYBOOK_GROUPS[idx];
+    playbookLabel.textContent = group.label;
+    document.getElementById('toggle-variations').checked = true;
+    Message.onToggle(true);
+    AppState.variations = group.msgs.map(x => x.text);
+    Message.renderVariations();
+    const first = group.msgs[0];
+    document.getElementById('main-message').value = first.text;
+    document.getElementById('main-char-count').textContent = `${first.text.length} caracteres`;
+    // marca item ativo
+    playbookMenu.querySelectorAll('.playbook-group-btn').forEach((el, i) => {
+      el.classList.toggle('active', i === idx);
     });
+    playbookMenu.classList.add('hidden');
+  }
+
+  PLAYBOOK_GROUPS.forEach((group, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'playbook-group-btn';
+    btn.innerHTML = `<span class="pgb-name">${esc(group.label)}</span><span class="pgb-count">${group.msgs.length} variações</span>`;
+    btn.onclick = () => selectPlaybook(idx);
+    playbookMenu.appendChild(btn);
   });
+
   document.getElementById('btn-playbook').onclick = e => {
     e.stopPropagation();
     playbookMenu.classList.toggle('hidden');
