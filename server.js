@@ -671,11 +671,14 @@ app.post('/api/agent/chat', requireAuth, async (req, res) => {
 app.post('/api/agent/config', requireAuth, (req, res) => {
   const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model,
           schedulingEnabled, calendarId, googleClientId, googleClientSecret } = req.body;
+  // Auto-ativa se instância + token + chave preenchidos, só desativa se user explicitamente desativou
+  const hasRequiredFields = !!(instanceToken && openrouterKey);
+  const shouldBeActive = hasRequiredFields ? (active === false ? false : true) : !!active;
   agentConfig = {
     // Preserva token OAuth e email ao salvar — não apaga o login do Google
     googleRefreshToken: agentConfig.googleRefreshToken || '',
     googleEmail:        agentConfig.googleEmail || '',
-    active: !!active,
+    active: shouldBeActive,
     instanceName: instanceName || '', instanceToken: instanceToken || '',
     prompt: prompt || '', docText: docText || '',
     openrouterKey: openrouterKey || '', model: model || 'deepseek/deepseek-chat-v3-0324:free',
@@ -788,16 +791,30 @@ app.post('/api/agent/webhook', async (req, res) => {
   res.status(200).json({ ok: true }); // responde imediatamente
   try {
     if (!agentConfig.active || !agentConfig.instanceToken) return;
+
     const event = req.body?.event || req.body?.type || '';
-    if (!event.toLowerCase().includes('message')) return;
+    // Só processa novas mensagens recebidas — ignora updates de status, mensagens enviadas, etc.
+    if (event !== 'messages.upsert') return;
 
-    const msgData = req.body?.data || req.body?.messages?.[0] || req.body;
-    if (!msgData) return;
+    // Normaliza data — Evolution Go às vezes envia array
+    const rawData = req.body?.data;
+    const msgData = Array.isArray(rawData) ? rawData[0] : (rawData || req.body?.messages?.[0] || req.body);
+    if (!msgData || typeof msgData !== 'object') return;
+
+    // Skip mensagens enviadas por nós
     if (msgData?.key?.fromMe) return;
-    const isGroup = (msgData?.key?.remoteJid || '').includes('@g.us');
-    if (isGroup) return;
 
-    const from = (msgData?.key?.remoteJid || '').replace('@s.whatsapp.net', '');
+    // Skip tipos de mensagem que não são texto/áudio real
+    const msgType = msgData?.messageType || '';
+    const SKIP_TYPES = ['reactionMessage', 'protocolMessage', 'senderKeyDistributionMessage', 'ephemeralMessage', 'pollCreationMessage', 'pollUpdateMessage'];
+    if (SKIP_TYPES.includes(msgType)) return;
+
+    const remoteJid = msgData?.key?.remoteJid || '';
+    // Skip grupos e broadcasts
+    if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast') || remoteJid === 'status@broadcast') return;
+
+    // Normaliza número — aceita @s.whatsapp.net e @lid
+    const from = remoteJid.replace(/@[\w.]+$/, '');
     if (!from) return;
 
     // Verifica se IA está desativada para este número

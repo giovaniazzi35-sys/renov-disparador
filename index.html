@@ -2846,8 +2846,10 @@ const Agent = {
       const j = await res.json();
       if (j.ok) {
         localStorage.setItem('agent_or_key', openrouterKey);
-        UI.addBanner('info', '✓ Configuração salva!');
+        UI.addBanner('info', '✓ Configuração salva! Agente ativo.');
         document.getElementById('agent-instance-label').textContent = instanceName ? '📱 ' + instanceName : '';
+        // Auto-ativa badge se campos preenchidos
+        if (instanceToken && openrouterKey) this.updateBadge(true);
       } else {
         UI.addBanner('error', 'Erro ao salvar configuração.');
       }
