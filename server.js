@@ -420,6 +420,25 @@ const msgBuffer = new Map(); // phone → { texts: [], seq: 0 }
 // Status de qualificação por contato: potencial | desqualificado | agencia | ''
 const conversationStatus = new Map(); // phone → status
 
+// Classificação determinística por palavras-chave (backup, não depende do modelo)
+function classifyByKeywords(text) {
+  const t = (text || '').toLowerCase();
+  // Já tem agência/assessoria — prioridade máxima
+  if (/\b(j[áa]\s+(tenho|temos|trabalho|possu[oi])|tenho|temos|contrat[ei]|uso)\b[^.]{0,40}\b(ag[êe]ncia|assessoria|marketing|social media|g[eê]stor de tr[aá]fego|empresa de marketing)\b/.test(t)
+      || /\b(minha|nossa)\s+(ag[êe]ncia|assessoria)\b/.test(t)
+      || /\bj[áa]\s+(fa[çc]o|fazemos|invisto)\b[^.]{0,30}\bcom\b[^.]{0,30}\b(ag[êe]ncia|assessoria)\b/.test(t)) {
+    return 'agencia';
+  }
+  // Sinais fortes de lead potencial
+  const ownerSignal  = /\b(sou (dono|dona|propriet[áa]ri|s[óo]ci)|minha [óo]tica|minha loja|minha rede|tenho \d+ (loja|[óo]tica)|respons[áa]vel pelo)\b/.test(t);
+  const opticSignal  = /\b([óo]tica|[óo]ticas|[óo]culos|lentes)\b/.test(t);
+  const interestSignal = /\b(quero|tenho interesse|me interessa|gostaria|bora|vamos marcar|marcar (uma )?reuni[ãa]o|quero saber mais|como funciona|quanto|aumentar (meus |as )?(clientes|vendas)|preciso vender)\b/.test(t);
+  if ((ownerSignal && (opticSignal || interestSignal)) || (opticSignal && interestSignal)) {
+    return 'potencial';
+  }
+  return '';
+}
+
 // Carrega histórico do Supabase se ainda não está em memória (sobrevive a cold starts)
 async function loadConversation(phone) {
   if (conversationHistory.has(phone)) return;
@@ -1089,6 +1108,21 @@ app.post('/api/agent/webhook', async (req, res) => {
       }
     }
 
+    // Classificação por palavras-chave ANTES do modelo — garante disparo mesmo
+    // que o modelo gratuito falhe em responder
+    const prevStatusEarly = conversationStatus.get(from) || '';
+    const kwEarly = classifyByKeywords(combined);
+    if (kwEarly === 'potencial' && prevStatusEarly !== 'potencial' && prevStatusEarly !== 'agencia') {
+      conversationStatus.set(from, 'potencial');
+      const leadNome = msgData.pushName || from;
+      await forwardIndication(sendToken,
+        `🟢 *Lead qualificado pelo agente!*\n\n👤 Nome: ${leadNome}\n📱 WhatsApp: ${from}\n\n💬 Última mensagem:\n"${combined.slice(0, 300)}"\n\n✅ Demonstrou interesse — vale acompanhar.`);
+      console.log(`[${ts}] 🟢 ${from} qualificado (palavra-chave) — enviado ao grupo Renov Gestão`);
+    } else if (kwEarly === 'agencia' && prevStatusEarly !== 'agencia') {
+      conversationStatus.set(from, 'agencia');
+      console.log(`[${ts}] 🟠 ${from} tem agência (palavra-chave)`);
+    }
+
     // Mantém histórico de conversa por contato
     if (!conversationHistory.has(from)) conversationHistory.set(from, []);
     const history = conversationHistory.get(from);
@@ -1156,26 +1190,36 @@ app.post('/api/agent/webhook', async (req, res) => {
     }
 
     const reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
-    if (!reply) return;
+    // Se o modelo não respondeu, ainda persiste o status detectado por palavra-chave
+    if (!reply) {
+      if (conversationStatus.get(from) && conversationStatus.get(from) !== prevStatusEarly) saveConversation(from);
+      console.warn(`[${ts}] ⚠ modelo sem resposta para ${from} — status preservado`);
+      return;
+    }
 
-    // Extrai marcador de status (classificação do lead) e remove da resposta
-    const prevStatus = conversationStatus.get(from) || '';
-    const statusTag = (reply.match(/\[STATUS:\s*(\w+)\s*\]/i)?.[1] || '').toLowerCase();
-    if (statusTag && statusTag !== 'andamento') {
+    // Refina a classificação com o marcador do modelo (a heurística já rodou antes)
+    const statusBefore = conversationStatus.get(from) || '';
+    const modelTag = (reply.match(/\[STATUS:\s*(\w+)\s*\]/i)?.[1] || '').toLowerCase();
+    let statusTag = statusBefore;
+    if (modelTag === 'agencia') statusTag = 'agencia';
+    else if (modelTag === 'potencial' && statusBefore !== 'agencia') statusTag = 'potencial';
+    else if (modelTag === 'desqualificado' && !statusBefore) statusTag = 'desqualificado';
+
+    if (statusTag && statusTag !== statusBefore) {
       conversationStatus.set(from, statusTag);
-      console.log(`[${ts}] 🏷 ${from} classificado como: ${statusTag}`);
+      console.log(`[${ts}] 🏷 ${from} classificado como: ${statusTag} (modelo=${modelTag||'-'})`);
     }
     // Lead com agência/assessoria: para de responder automaticamente
     if (statusTag === 'agencia') {
       disabledNumbers.add(from);
       console.log(`[${ts}] 🟠 ${from} tem agência — IA desativada para este contato`);
     }
-    // Lead qualificado (potencial): encaminha para o grupo Renov Gestão — só na 1ª vez
-    if (statusTag === 'potencial' && prevStatus !== 'potencial') {
+    // Lead qualificado detectado só agora pelo modelo (heurística não pegou): encaminha
+    if (statusTag === 'potencial' && statusBefore !== 'potencial') {
       const leadNome = msgData.pushName || from;
       await forwardIndication(sendToken,
         `🟢 *Lead qualificado pelo agente!*\n\n👤 Nome: ${leadNome}\n📱 WhatsApp: ${from}\n\n💬 Última mensagem:\n"${combined.slice(0, 300)}"\n\n✅ Demonstrou interesse — vale acompanhar.`);
-      console.log(`[${ts}] 🟢 ${from} qualificado — enviado ao grupo Renov Gestão`);
+      console.log(`[${ts}] 🟢 ${from} qualificado (modelo) — enviado ao grupo Renov Gestão`);
     }
 
     // Detecta marcador de agendamento
