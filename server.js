@@ -651,27 +651,31 @@ function isAudioMessage(data) {
   return !!(m.audioMessage || m.pttMessage || m.documentMessage?.mimetype?.startsWith('audio'));
 }
 
-// Número que recebe os contatos indicados pelos leads (donos de ótica / responsáveis)
-const CONTACT_FORWARD_NUMBER = '5511970799985';
+// Destino das indicações: grupo "Renov Gestão ✅" do WhatsApp.
+// Se o envio ao grupo falhar, cai para o número pessoal de reserva.
+const CONTACT_FORWARD_GROUP  = '120363427333810759@g.us'; // Renov Gestão ✅
+const CONTACT_FORWARD_NUMBER = '5511970799985';           // reserva
 
-// Envia a indicação com até 3 tentativas — a mensagem PRECISA chegar
+// Envia a indicação com até 3 tentativas por destino — a mensagem PRECISA chegar
 async function forwardIndication(sendToken, textMsg) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const r = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-        method: 'POST',
-        headers: { apikey: sendToken },
-        body: JSON.stringify({ number: CONTACT_FORWARD_NUMBER, text: textMsg, delay: 800 }),
-      });
-      if (r.ok) { console.log(`[INDICACAO] enviada para ${CONTACT_FORWARD_NUMBER} (tentativa ${attempt})`); return true; }
-      const errBody = await r.text().catch(() => '');
-      console.warn(`[INDICACAO] tentativa ${attempt} falhou (${r.status}): ${errBody.slice(0, 200)}`);
-    } catch (err) {
-      console.warn(`[INDICACAO] tentativa ${attempt} erro: ${err.message}`);
+  for (const dest of [CONTACT_FORWARD_GROUP, CONTACT_FORWARD_NUMBER]) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const r = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+          method: 'POST',
+          headers: { apikey: sendToken },
+          body: JSON.stringify({ number: dest, text: textMsg, delay: 800 }),
+        });
+        if (r.ok) { console.log(`[INDICACAO] enviada para ${dest} (tentativa ${attempt})`); return true; }
+        const errBody = await r.text().catch(() => '');
+        console.warn(`[INDICACAO] ${dest} tentativa ${attempt} falhou (${r.status}): ${errBody.slice(0, 200)}`);
+      } catch (err) {
+        console.warn(`[INDICACAO] ${dest} tentativa ${attempt} erro: ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 1500));
     }
-    await new Promise(r => setTimeout(r, 1500));
   }
-  console.error('[INDICACAO] FALHA DEFINITIVA — todas as tentativas falharam');
+  console.error('[INDICACAO] FALHA DEFINITIVA — grupo e número reserva falharam');
   return false;
 }
 
