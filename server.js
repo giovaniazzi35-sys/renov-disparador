@@ -654,6 +654,37 @@ function isAudioMessage(data) {
 // Número que recebe os contatos indicados pelos leads (donos de ótica / responsáveis)
 const CONTACT_FORWARD_NUMBER = '5511970799985';
 
+// Envia a indicação com até 3 tentativas — a mensagem PRECISA chegar
+async function forwardIndication(sendToken, textMsg) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const r = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+        method: 'POST',
+        headers: { apikey: sendToken },
+        body: JSON.stringify({ number: CONTACT_FORWARD_NUMBER, text: textMsg, delay: 800 }),
+      });
+      if (r.ok) { console.log(`[INDICACAO] enviada para ${CONTACT_FORWARD_NUMBER} (tentativa ${attempt})`); return true; }
+      const errBody = await r.text().catch(() => '');
+      console.warn(`[INDICACAO] tentativa ${attempt} falhou (${r.status}): ${errBody.slice(0, 200)}`);
+    } catch (err) {
+      console.warn(`[INDICACAO] tentativa ${attempt} erro: ${err.message}`);
+    }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  console.error('[INDICACAO] FALHA DEFINITIVA — todas as tentativas falharam');
+  return false;
+}
+
+// Detecta telefones brasileiros digitados no texto (ex.: "o dono é João, 11 98888-7777")
+function extractPhonesFromText(text, ignoreList = []) {
+  const matches = [...(text || '').matchAll(/(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}\b/g)];
+  const phones = matches
+    .map(m => m[0].replace(/\D/g, ''))
+    .filter(d => d.length >= 10 && d.length <= 13)
+    .map(d => (d.length === 10 || d.length === 11) ? '55' + d : d);
+  return [...new Set(phones)].filter(p => !ignoreList.includes(p));
+}
+
 // Extrai contatos compartilhados (vCard) da mensagem
 function extractContacts(data) {
   const m = data?.message || {};
@@ -1006,16 +1037,8 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (sharedContacts.length) {
       const senderName = msgData.pushName || from;
       for (const c of sharedContacts) {
-        await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-          method: 'POST',
-          headers: { apikey: sendToken },
-          body: JSON.stringify({
-            number: CONTACT_FORWARD_NUMBER,
-            text: `📇 *Indicação recebida pelo agente*\n\n👤 Nome: ${c.name}\n📱 Telefone: ${c.phone}\n\n🔁 Indicado por: ${senderName} (${from})`,
-            delay: 1000,
-          }),
-        });
-        console.log(`[${ts}] 📇 Contato encaminhado para ${CONTACT_FORWARD_NUMBER}: ${c.name} ${c.phone}`);
+        await forwardIndication(sendToken,
+          `📇 *Indicação recebida pelo agente*\n\n👤 Nome: ${c.name}\n📱 Telefone: ${c.phone}\n\n🔁 Indicado por: ${senderName} (${from})`);
       }
       const desc = sharedContacts.map(c => `${c.name} (${c.phone})`).join(', ');
       text = text ? `${text}\n[Enviei o contato de: ${desc}]` : `[Enviei o contato de: ${desc}]`;
@@ -1043,8 +1066,19 @@ app.post('/api/agent/webhook', async (req, res) => {
       console.log(`[WEBHOOK] ${from}: mensagem agregada ao buffer, aguardando a última`);
       return;
     }
-    const combined = buf.texts.join('\n');
+    let combined = buf.texts.join('\n');
     buf.texts = [];
+
+    // Telefone digitado no texto (indicação de dono/responsável) — encaminha na hora
+    const typedPhones = extractPhonesFromText(combined, [from, CONTACT_FORWARD_NUMBER]);
+    if (typedPhones.length) {
+      const senderName2 = msgData.pushName || from;
+      const forwarded = await forwardIndication(sendToken,
+        `📇 *Indicação recebida pelo agente*\n\n📱 Telefone(s): ${typedPhones.join(', ')}\n💬 Mensagem original:\n"${combined.slice(0, 400)}"\n\n🔁 Indicado por: ${senderName2} (${from})`);
+      if (forwarded) {
+        combined += `\n[Enviei o contato de: ${typedPhones.join(', ')}]`;
+      }
+    }
 
     // Mantém histórico de conversa por contato
     if (!conversationHistory.has(from)) conversationHistory.set(from, []);
