@@ -676,13 +676,14 @@ async function forwardIndication(sendToken, textMsg) {
 }
 
 // Detecta telefones brasileiros digitados no texto (ex.: "o dono é João, 11 98888-7777")
-function extractPhonesFromText(text, ignoreList = []) {
+// Encaminha QUALQUER telefone detectado — sem lista de exclusão
+function extractPhonesFromText(text) {
   const matches = [...(text || '').matchAll(/(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}\b/g)];
   const phones = matches
     .map(m => m[0].replace(/\D/g, ''))
     .filter(d => d.length >= 10 && d.length <= 13)
     .map(d => (d.length === 10 || d.length === 11) ? '55' + d : d);
-  return [...new Set(phones)].filter(p => !ignoreList.includes(p));
+  return [...new Set(phones)];
 }
 
 // Extrai contatos compartilhados (vCard) da mensagem
@@ -1070,7 +1071,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     buf.texts = [];
 
     // Telefone digitado no texto (indicação de dono/responsável) — encaminha na hora
-    const typedPhones = extractPhonesFromText(combined, [from, CONTACT_FORWARD_NUMBER]);
+    const typedPhones = extractPhonesFromText(combined);
     if (typedPhones.length) {
       const senderName2 = msgData.pushName || from;
       const forwarded = await forwardIndication(sendToken,
