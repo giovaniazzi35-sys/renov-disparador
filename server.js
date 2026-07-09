@@ -348,7 +348,16 @@ const AGENT_FILE    = path.join(__dirname, 'agent-config.json');
 const SUPABASE_URL  = (process.env.SUPABASE_URL  || '').replace(/\/$/, '');
 const SUPABASE_KEY  = process.env.SUPABASE_KEY  || '';
 const SB_HEADERS    = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
-const DEFAULT_CFG   = () => ({ active: false, instanceName: '', instanceToken: '', prompt: '', docText: '', openrouterKey: '', model: 'deepseek/deepseek-chat-v3-0324:free', selectedPlaybook: 0, schedulingEnabled: false, calendarId: 'primary', googleClientId: '', googleClientSecret: '', googleRefreshToken: '', googleEmail: '' });
+const DEFAULT_CFG   = () => ({ active: false, manuallyDeactivated: false, instanceName: '', instanceToken: '', prompt: '', docText: '', openrouterKey: '', model: 'deepseek/deepseek-chat-v3-0324:free', selectedPlaybook: 0, schedulingEnabled: false, calendarId: 'primary', googleClientId: '', googleClientSecret: '', googleRefreshToken: '', googleEmail: '' });
+
+function autoActivate(cfg) {
+  // Mantém agente sempre ativo se os campos estiverem preenchidos,
+  // a menos que o usuário tenha desativado manualmente via toggle.
+  if (cfg.instanceToken && cfg.openrouterKey && !cfg.manuallyDeactivated) {
+    cfg.active = true;
+  }
+  return cfg;
+}
 
 async function loadAgentConfig() {
   // 1. Supabase (fonte principal — persiste entre deploys)
@@ -358,17 +367,17 @@ async function loadAgentConfig() {
       const rows = await r.json();
       if (r.ok && Array.isArray(rows) && rows[0]?.data && Object.keys(rows[0].data).length > 0) {
         console.log('✅ Config carregado do Supabase');
-        return { ...DEFAULT_CFG(), ...rows[0].data };
+        return autoActivate({ ...DEFAULT_CFG(), ...rows[0].data });
       }
     } catch (err) { console.warn('Supabase load error:', err.message); }
   }
   // 2. Variável de ambiente legada
   if (process.env.AGENT_CONFIG_JSON) {
-    try { return { ...DEFAULT_CFG(), ...JSON.parse(process.env.AGENT_CONFIG_JSON) }; } catch (_) {}
+    try { return autoActivate({ ...DEFAULT_CFG(), ...JSON.parse(process.env.AGENT_CONFIG_JSON) }); } catch (_) {}
   }
   // 3. Arquivo local (desenvolvimento)
   if (fs.existsSync(AGENT_FILE)) {
-    try { return { ...DEFAULT_CFG(), ...JSON.parse(fs.readFileSync(AGENT_FILE, 'utf8')) }; } catch (_) {}
+    try { return autoActivate({ ...DEFAULT_CFG(), ...JSON.parse(fs.readFileSync(AGENT_FILE, 'utf8')) }); } catch (_) {}
   }
   return DEFAULT_CFG();
 }
@@ -671,14 +680,14 @@ app.post('/api/agent/chat', requireAuth, async (req, res) => {
 app.post('/api/agent/config', requireAuth, (req, res) => {
   const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model,
           schedulingEnabled, calendarId, googleClientId, googleClientSecret } = req.body;
-  // Auto-ativa se instância + token + chave preenchidos, só desativa se user explicitamente desativou
+  // Ao salvar configurações completas, sempre reativa e limpa flag de desativação manual
   const hasRequiredFields = !!(instanceToken && openrouterKey);
-  const shouldBeActive = hasRequiredFields ? (active === false ? false : true) : !!active;
   agentConfig = {
     // Preserva token OAuth e email ao salvar — não apaga o login do Google
     googleRefreshToken: agentConfig.googleRefreshToken || '',
     googleEmail:        agentConfig.googleEmail || '',
-    active: shouldBeActive,
+    active: hasRequiredFields ? true : !!active,
+    manuallyDeactivated: false,
     instanceName: instanceName || '', instanceToken: instanceToken || '',
     prompt: prompt || '', docText: docText || '',
     openrouterKey: openrouterKey || '', model: model || 'deepseek/deepseek-chat-v3-0324:free',
@@ -781,6 +790,8 @@ app.post('/api/agent/test-calendar', requireAuth, async (req, res) => {
 
 app.post('/api/agent/toggle', requireAuth, (req, res) => {
   agentConfig.active = !agentConfig.active;
+  // Persiste intenção do usuário — só respeita desativação manual
+  agentConfig.manuallyDeactivated = !agentConfig.active;
   saveAgentConfig(agentConfig);
   logReq('POST', '/api/agent/toggle', `active=${agentConfig.active}`);
   res.json({ ok: true, active: agentConfig.active });
