@@ -401,10 +401,13 @@ let agentConfig = DEFAULT_CFG();
 let _configReady = false;
 loadAgentConfig().then(cfg => { agentConfig = cfg; _configReady = true; }).catch(() => { _configReady = true; });
 
-// Garante que agentConfig está carregado antes de qualquer rota sensível
+// Garante que agentConfig está carregado antes de qualquer rota sensível.
+// Se o load falhou (ex.: Supabase indisponível), tenta de novo na próxima requisição.
 async function ensureConfig() {
-  if (_configReady) return;
-  agentConfig = await loadAgentConfig();
+  if (_configReady && agentConfig.instanceToken) return;
+  try {
+    agentConfig = await loadAgentConfig();
+  } catch (_) {}
   _configReady = true;
 }
 app.use(async (req, res, next) => { await ensureConfig(); next(); });
@@ -546,6 +549,27 @@ async function callOpenRouter(apiKey, model, systemPrompt, messages) {
   return data?.choices?.[0]?.message?.content || '';
 }
 
+// Evolution Go (whatsmeow) envia { Info: {Chat, Sender, IsFromMe, IsGroup, ID, Type}, Message: {...} }
+// Evolution JS (Baileys) envia { key: {remoteJid, fromMe, id}, message: {...}, messageType }
+// Normaliza ambos para o formato Baileys usado pelo resto do código.
+function normalizeMsgData(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.key && raw.message) return raw; // já é Baileys
+
+  const info = raw.Info || raw.info;
+  if (info) {
+    const jid = (typeof info.Chat === 'string' ? info.Chat : info.Chat?.User ? `${info.Chat.User}@${info.Chat.Server || 's.whatsapp.net'}` : '') || '';
+    return {
+      key: { remoteJid: jid, fromMe: !!info.IsFromMe, id: info.ID || '' },
+      message: raw.Message || raw.message || {},
+      messageType: info.Type || '',
+      pushName: info.PushName || '',
+      _isGroup: !!info.IsGroup,
+    };
+  }
+  return raw; // formato desconhecido — deixa o fluxo tentar
+}
+
 function extractMsgText(data) {
   const m = data?.message || {};
   return m.conversation
@@ -562,15 +586,16 @@ function isAudioMessage(data) {
   return !!(m.audioMessage || m.pttMessage || m.documentMessage?.mimetype?.startsWith('audio'));
 }
 
-async function transcribeAudio(data, apiKey) {
+async function transcribeAudio(data, apiKey, instanceToken) {
   try {
     // Tenta obter base64 do áudio via Evolution API
     const msgKey = data?.key;
-    if (!msgKey || !agentConfig.instanceToken) return null;
+    const token = instanceToken || agentConfig.instanceToken;
+    if (!msgKey || !token) return null;
 
     const mediaRes = await proxyFetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage`, {
       method: 'POST',
-      headers: { apikey: agentConfig.instanceToken },
+      headers: { apikey: token },
       body: JSON.stringify({ key: msgKey, convertToMp4: false }),
     });
     if (!mediaRes.ok) return null;
@@ -802,12 +827,14 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (webhookLog.length > 30) webhookLog.shift();
     console.log(`[WEBHOOK] event="${rawEvent}" keys=${Object.keys(req.body || {}).join(',')}`);
 
-    if (!agentConfig.active || !agentConfig.instanceToken) {
-      console.log(`[WEBHOOK] ignorado — active=${agentConfig.active} token=${!!agentConfig.instanceToken}`);
+    // Token: usa o da config, ou o que a própria Evolution Go manda no webhook
+    const sendToken = agentConfig.instanceToken || req.body?.instanceToken || '';
+    if (!agentConfig.active || !sendToken) {
+      console.log(`[WEBHOOK] ignorado — active=${agentConfig.active} token=${!!sendToken}`);
       return;
     }
 
-    // Evolution Go usa "MESSAGE"; Evolution JS usa "messages.upsert" — aceita ambos
+    // Evolution Go usa "Message"; Evolution JS usa "messages.upsert" — aceita ambos
     const ev = rawEvent.toUpperCase().replace(/[.\-_]/g, '');
     const isMessageEvent = ev === 'MESSAGE' || ev === 'MESSAGESUPSERT' || ev === 'MESSAGES';
     if (!isMessageEvent) {
@@ -815,24 +842,28 @@ app.post('/api/agent/webhook', async (req, res) => {
       return;
     }
 
-    // Normaliza data — pode ser objeto ou array
+    // Normaliza data — pode ser objeto, array, formato Baileys ou whatsmeow (Evolution Go)
     const rawData = req.body?.data;
-    const msgData = Array.isArray(rawData) ? rawData[0] : (rawData || req.body?.messages?.[0] || req.body);
-    if (!msgData || typeof msgData !== 'object') return;
+    const picked = Array.isArray(rawData) ? rawData[0] : (rawData || req.body?.messages?.[0] || req.body);
+    const msgData = normalizeMsgData(picked);
+    if (!msgData || typeof msgData !== 'object' || !msgData.key) {
+      console.log(`[WEBHOOK] payload não reconhecido: ${JSON.stringify(picked).slice(0, 400)}`);
+      return;
+    }
 
-    console.log(`[WEBHOOK] fromMe=${msgData?.key?.fromMe} jid=${msgData?.key?.remoteJid} type=${msgData?.messageType}`);
+    console.log(`[WEBHOOK] fromMe=${msgData.key.fromMe} jid=${msgData.key.remoteJid} type=${msgData.messageType}`);
 
     // Skip mensagens enviadas por nós
-    if (msgData?.key?.fromMe) return;
+    if (msgData.key.fromMe) return;
 
     // Skip tipos de mensagem que não são texto/áudio real
     const msgType = msgData?.messageType || '';
-    const SKIP_TYPES = ['reactionMessage', 'protocolMessage', 'senderKeyDistributionMessage', 'ephemeralMessage', 'pollCreationMessage', 'pollUpdateMessage'];
+    const SKIP_TYPES = ['reactionMessage', 'protocolMessage', 'senderKeyDistributionMessage', 'pollCreationMessage', 'pollUpdateMessage'];
     if (SKIP_TYPES.includes(msgType)) return;
 
-    const remoteJid = msgData?.key?.remoteJid || '';
+    const remoteJid = msgData.key.remoteJid || '';
     // Skip grupos e broadcasts
-    if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast') || remoteJid === 'status@broadcast') return;
+    if (msgData._isGroup || !remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast') || remoteJid === 'status@broadcast') return;
 
     // Normaliza número — aceita @s.whatsapp.net e @lid
     const from = remoteJid.replace(/@[\w.]+$/, '');
@@ -850,7 +881,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     // Transcreve áudio se necessário
     if (!text && isAudioMessage(msgData)) {
       console.log(`[${ts}] 🎙 Áudio recebido de ${from} — transcrevendo...`);
-      const transcription = await transcribeAudio(msgData, key);
+      const transcription = await transcribeAudio(msgData, key, sendToken);
       if (transcription) {
         text = `[Áudio transcrito]: ${transcription}`;
         console.log(`[${ts}] 🎙 Transcrição: ${transcription.slice(0, 80)}`);
@@ -858,14 +889,17 @@ app.post('/api/agent/webhook', async (req, res) => {
         // Sem transcrição disponível — avisa o contato
         await proxyFetch(`${EVOLUTION_URL}/send/text`, {
           method: 'POST',
-          headers: { apikey: agentConfig.instanceToken },
+          headers: { apikey: sendToken },
           body: JSON.stringify({ number: from, text: 'Recebi seu áudio! Para agilizar, pode me mandar a mensagem por escrito? 😊', delay: 1500 }),
         });
         return;
       }
     }
 
-    if (!text) return;
+    if (!text) {
+      console.log(`[WEBHOOK] sem texto extraível — message=${JSON.stringify(msgData.message || {}).slice(0, 300)}`);
+      return;
+    }
 
     console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 80)}`);
 
@@ -937,11 +971,15 @@ app.post('/api/agent/webhook', async (req, res) => {
     }
 
     // Envia resposta principal
-    await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+    const sendRes = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
       method: 'POST',
-      headers: { apikey: agentConfig.instanceToken },
+      headers: { apikey: sendToken },
       body: JSON.stringify({ number: from, text: cleanReply, delay: 1500 }),
     });
+    if (!sendRes.ok) {
+      const errBody = await sendRes.text().catch(() => '');
+      console.error(`[WEBHOOK] falha ao enviar resposta (${sendRes.status}): ${errBody.slice(0, 300)}`);
+    }
 
     // Envia link do Meet separado
     if (meetLink) {
@@ -949,7 +987,7 @@ app.post('/api/agent/webhook', async (req, res) => {
       const linkMsg = `📅 *Reunião confirmada!*\n\n🗓 ${slotBRT}\n🔗 Link para entrar:\n${meetLink}\n\nEsperamos você! 🚀`;
       await proxyFetch(`${EVOLUTION_URL}/send/text`, {
         method: 'POST',
-        headers: { apikey: agentConfig.instanceToken },
+        headers: { apikey: sendToken },
         body: JSON.stringify({ number: from, text: linkMsg, delay: 3000 }),
       });
     }
