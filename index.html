@@ -489,6 +489,7 @@
     .playbook-item:last-child { border-bottom:none; }
     .pi-title { font-weight:700;color:var(--accent);font-size:11px;margin-bottom:2px; }
     .pi-preview { color:var(--text-2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .playbook-group-header { padding:7px 14px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-3);background:var(--card2);border-bottom:1px solid var(--border);position:sticky;top:0; }
 
     /* ── Dispatch ── */
     .dispatch-big-btn { width: 100%; justify-content: center; margin-bottom: 20px; }
@@ -862,10 +863,15 @@
   <div class="step-panel" data-panel="3">
     <div class="card">
       <div class="card-title">Qual é a mensagem?</div>
-      <div class="card-sub">Escreva o texto do disparo. Use <code style="background:var(--card2);padding:1px 5px;border-radius:4px">{nome}</code> para personalizar com o nome de cada contato.</div>
+      <div class="card-sub">Escreva o texto do disparo. Use <code style="background:var(--card2);padding:1px 5px;border-radius:4px">{nome}</code> para o nome do contato e <code style="background:var(--card2);padding:1px 5px;border-radius:4px">{remetente}</code> para o seu nome.</div>
+
+      <div class="field" style="margin-bottom:12px">
+        <label class="field-label">Seu nome (remetente) <span style="font-weight:400;color:var(--text-3)">— substitui {remetente} nas mensagens</span></label>
+        <input type="text" id="sender-name" placeholder="Ex: João, Gerente da Renov" style="max-width:360px" />
+      </div>
 
       <div class="field">
-        <div class="placeholder-hint">💡 <span class="chip">{nome}</span> será substituído pelo nome do contato</div>
+        <div class="placeholder-hint">💡 <span class="chip">{nome}</span> = contato &nbsp;|&nbsp; <span class="chip">{remetente}</span> = seu nome</div>
         <textarea id="main-message" placeholder="Olá {nome}, temos uma oferta especial para você! 🎉"></textarea>
         <div class="char-count" id="main-char-count">0 caracteres</div>
       </div>
@@ -1308,6 +1314,7 @@ const AppState = {
   qrTimer: null,
   qrCountdown: 60,
   connPollTimer: null,
+  senderName: localStorage.getItem('senderName') || '',
 };
 
 // ============================================================
@@ -1336,6 +1343,37 @@ const PLAYBOOK_MSGS = [
   { title: '8 · Autoridade + curiosidade',    text: 'Oi, {nome}! Da Renov Assessoria.\nJá rodamos campanhas pra Coca-Cola, iFood, Grupo Carreira e redes de óticas e clínicas — 70+ cases no portfólio.\nUma pergunta rápida: a empresa de vocês tem tráfego pago ativo hoje ou ainda tá no início disso?\nO comercial é com você?' },
   { title: '9 · Escassez leve',               text: 'Oi, {nome}! Tudo bem?\nSou da Renov Assessoria — tráfego pago pra franquias e redes. 70+ cases, iFood, Coca-Cola e redes de saúde e varejo pelo Brasil.\nTodo mês abrimos poucas vagas pra novos clientes, justamente pra manter a qualidade.\nVocês estão num momento de expansão de marketing? Você que decide sobre isso?' },
   { title: '10 · Ultra curto e direto',       text: 'Oi, {nome}! Da Renov Assessoria.\nTráfego pago pra redes e franquias — 70+ cases, iFood, Coca-Cola, Grupo Carreira.\nDuas perguntas rápidas:\n1) Vocês já investem em tráfego pago hoje?\n2) O comercial é com você mesmo?' },
+];
+
+// ── Guia 1 – Óticas ──────────────────────────────────────────
+const PLAYBOOK_GUIA1 = [
+  { title: 'G01 · Previsibilidade de pacientes', text: 'Olá, tudo bem?\nSou {remetente}, Gerente da Renov\nHoje nós ajudamos óticas\na criar uma previsibilidade\nde pacientes interessados em procedimentos.\nHoje geramos em média\n250 a 300 pessoas interessadas por mês.\nVocês já passaram por isso? E o comercial é com você?' },
+  { title: 'G02 · Fluxo previsível',             text: 'Olá, tudo bem?\nSou {remetente}, Gerente da Renov\nHoje nós ajudamos óticas a criar um fluxo previsível de clientes buscando óculos de grau e exames.\n\nAtualmente geramos em média 250 a 300 potenciais compradores por mês.\n\nVocê é a pessoa certa pra conversar sobre marketing e aquisição de clientes?' },
+  { title: 'G03 · Agenda previsível',            text: 'Olá, tudo bem?\nSou {remetente}, Gerente da Renov\n\nAtualmente estruturamos para óticas uma agenda previsível de pessoas interessadas em receitas e exames de vista. Conseguimos atrair em média 250 a 300 novos contatos qualificados por mês.\nVocê é quem toca o comercial por aí ou tem outra pessoa?' },
+  { title: 'G04 · Casos iFood / Coca-Cola',      text: 'Olá, tudo bem?\nSou {remetente} da Renov Assessoria — trabalhamos com tráfego pago pra redes e franquias, já são mais de 70 cases com marcas como iFood, Coca-Cola e Grupo Carreira.\n\nAjudamos sua ótica a ter previsibilidade de novos orçamentos no balcão todos os dias.\nVocê é o responsável pelo comercial e marketing?' },
+  { title: 'G05 · Gap oculto',                   text: 'Olá, tudo bem?\nEstava analisando a região e vi o posicionamento de vocês.\n\nAjudamos donos de óticas a resolver um gap oculto: atrair um fluxo previsível de pessoas interessadas em fazer lentes de alto valor, sem precisar ficar refém de panfletagem ou descontos agressivos.\n\nHoje geramos em média 250 a 300 potenciais clientes por mês. Posso te explicar como funciona?' },
+  { title: 'G06 · Fluxo Balcão',                 text: 'Olá, tudo bem?\nSou {remetente}, Gerente da Renov. Hoje nós ajudamos óticas a criar uma previsibilidade de novos orçamentos no balcão todos os dias. Hoje geramos em média 250 a 300 potenciais clientes por mês. O marketing é tocado por você mesmo?' },
+  { title: 'G07 · Faturamento Ocioso',           text: 'Olá, tudo bem?\nSou {remetente}, Gerente da Renov\nHoje nós ajudamos óticas a criar um fluxo previsível de clientes buscando renovar lentes e armações. Atualmente geramos em média 250 a 300 pessoas com receita na mão por mês.\nPosso te mostrar como funciona?' },
+  { title: 'G08 · Agenda Avaliações',            text: 'Olá, tudo certo?\nSou {remetente}, Gerente da Renov\nAtualmente estruturamos para óticas um fluxo previsível de pessoas interessadas em avaliações visuais e novos óculos. Conseguimos atrair em média 250 a 300 contatos prontos para atendimento por mês. Posso te explicar a estratégia?' },
+  { title: 'G09 · Troca Óculos',                 text: 'Olá, tudo bem? Sou {remetente}, Gerente da Renov\nNós geramos em média de 250 a 300 pessoas interessadas em trocar de óculos de grau por mês. Ajudamos sua ótica a ter previsibilidade de novos compradores procurando sua loja todos os dias. Faz sentido eu te explicar como funciona?' },
+];
+
+// ── 8 Mais Diretas ───────────────────────────────────────────
+const PLAYBOOK_DIRETAS = [
+  { title: 'D1 · Campeão Otimizado',      text: 'Olá, tudo bem?\n\nSou {remetente}, Gerente da Renov.\n\nHoje nós ajudamos redes de óticas a criar uma previsibilidade de média 250 a 300 pacientes altamente interessados em procedimentos específicos todos os meses.\n\nPara eu poupar o seu tempo por aqui: o comercial da rede fica sob o seu guarda-chuva ou quem cuida disso é outra pessoa?' },
+  { title: 'D2 · Prova Social',           text: 'Oi, {nome}! Tudo bem? Sou {remetente}, da Renov Assessoria. Nós já destravamos a escala de marcas como iFood e Coca-Cola, além de grandes redes de clínicas pelo Brasil.\n\nDesenvolvemos um canal de aquisição focado em injetar uma média de 250 a 300 potenciais pacientes buscando agendamentos de procedimentos direto no comercial das unidades mensalmente.\n\nVocê é a pessoa certa para falarmos sobre esse volume de captação ou me indicaria o contato de quem toca a expansão?' },
+  { title: 'D3 · Dor Loja Única',         text: 'Olá, tudo certo? Sou {remetente}, da Renov. Ajudamos franquias de óticas a resolver um problema comum: investir em tráfego e não escalar porque a estratégia foi pensada para clínica única, e não para rede.\n\nNas operações que assumimos, estabilizamos a tração gerando uma previsibilidade de 250 a 300 novos interessados por mês por região.\n\nVocês enfrentam esse desafio de escala entre as unidades hoje? O comercial é com você?' },
+  { title: 'D4 · Autonomia',              text: 'Olá, tudo bem? Sou {remetente}, da Renov. Nós estruturamos um ecossistema de tráfego pago para franquias de óticas que entrega, em média, de 250 a 300 oportunidades de procedimentos comerciais por mês.\n\nO comercial da {nome} estaria disposto a avaliar como geramos esse volume para operações similares, ou o cenário atual de agendamentos de vocês já está 100% preenchido? Se não for com você, quem seria o contato ideal?' },
+  { title: 'D5 · Redes Óticas',           text: 'Olá, tudo bem?\nSou {remetente}, Gerente da Renov.\n\nHoje nós ajudamos redes de óticas a criar uma previsibilidade de fluxo nas lojas, gerando em média 250 a 300 pessoas interessadas em trocar de óculos e armações por mês.\n\nSei que a rotina de rede é puxada: você toca a parte comercial/marketing por aí ou teria outra pessoa focada nisso?' },
+  { title: 'D6 · Humana e Direta',        text: 'Oi, me chamo {remetente}, sou da Renov Assessoria.\n\nSem rodeios por aqui: trabalhamos com tráfego pago focado em redes de varejo e óticas (mais de 70 cases, incluindo iFood e Coca-Cola). Conseguimos estruturar um canal que entrega de 250 a 300 novas oportunidades comerciais mensais por unidade.\n\nNão vim oferecer nada agora. Vim entender: você cuida da aquisição de clientes aí ou tem alguém responsável com quem eu possa alinhar esse cenário?' },
+  { title: 'D7 · Ultra-Curto',            text: 'Oi, Sou {remetente}, da Renov Assessoria (70+ cases de tráfego para redes e franquias).\n\nDesenvolvemos uma metodologia para óticas que coloca, em média, de 250 a 300 novos interessados em comprar armações e lentes em contato com o comercial todo mês.\n\nDuas perguntas bem rápidas para poupar seu tempo:\n1. O comercial e marketing da rede é com você mesmo?\n2. Se não for, qual o contato da pessoa certa para avaliarmos se vocês têm braço para esse volume hoje?' },
+  { title: 'D8 · Escassez Territorial',   text: 'Olá, tudo bem? Sou {remetente}, da Renov. Vi que a {nome} tem crescido bastante no mercado de óticas, e redes em expansão são exatamente o perfil que mais atendemos hoje.\n\nComo abrimos poucas vagas de atendimento por mês para garantir nossa entrega média de 250 a 300 novos clientes interessados direto no comercial das lojas, queria entender o momento de vocês.\n\nÉ você quem decide sobre novas estratégias de marketing ou me recomendaria falar com outro responsável?' },
+];
+
+const PLAYBOOK_GROUPS = [
+  { label: 'Padrão (10 variações)',  msgs: PLAYBOOK_MSGS },
+  { label: 'Guia 1 – Óticas (9)',    msgs: PLAYBOOK_GUIA1 },
+  { label: '8 Mais Diretas',         msgs: PLAYBOOK_DIRETAS },
 ];
 
 const API = {
@@ -1800,7 +1838,9 @@ const Message = {
   },
 
   interpolate(tpl, contact) {
-    return tpl.replace(/\{nome\}/gi, contact.name || '');
+    return tpl
+      .replace(/\{nome\}/gi, contact.name || '')
+      .replace(/\{remetente\}/gi, AppState.senderName || '');
   },
 
   preview() {
@@ -2515,28 +2555,42 @@ function init() {
 
   // Playbook dropdown
   const playbookMenu = document.getElementById('playbook-menu');
-  PLAYBOOK_MSGS.forEach((m, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'playbook-item';
-    btn.innerHTML = `<div class="pi-title">${esc(m.title)}</div><div class="pi-preview">${esc(m.text.split('\n')[0])}</div>`;
-    btn.onclick = () => {
-      // Ativa variações e carrega todas as 10
-      document.getElementById('toggle-variations').checked = true;
-      Message.onToggle(true);
-      AppState.variations = PLAYBOOK_MSGS.map(x => x.text);
-      Message.renderVariations();
-      // Coloca a variação clicada também no campo principal
-      document.getElementById('main-message').value = m.text;
-      document.getElementById('main-char-count').textContent = `${m.text.length} caracteres`;
-      playbookMenu.classList.add('hidden');
-    };
-    playbookMenu.appendChild(btn);
+  PLAYBOOK_GROUPS.forEach(group => {
+    const header = document.createElement('div');
+    header.className = 'playbook-group-header';
+    header.textContent = group.label;
+    playbookMenu.appendChild(header);
+    group.msgs.forEach(m => {
+      const btn = document.createElement('button');
+      btn.className = 'playbook-item';
+      btn.innerHTML = `<div class="pi-title">${esc(m.title)}</div><div class="pi-preview">${esc(m.text.split('\n')[0])}</div>`;
+      btn.onclick = () => {
+        document.getElementById('toggle-variations').checked = true;
+        Message.onToggle(true);
+        AppState.variations = group.msgs.map(x => x.text);
+        Message.renderVariations();
+        document.getElementById('main-message').value = m.text;
+        document.getElementById('main-char-count').textContent = `${m.text.length} caracteres`;
+        playbookMenu.classList.add('hidden');
+      };
+      playbookMenu.appendChild(btn);
+    });
   });
   document.getElementById('btn-playbook').onclick = e => {
     e.stopPropagation();
     playbookMenu.classList.toggle('hidden');
   };
   document.addEventListener('click', () => playbookMenu.classList.add('hidden'));
+
+  // Sender name field
+  const senderNameEl = document.getElementById('sender-name');
+  if (senderNameEl) {
+    senderNameEl.value = AppState.senderName;
+    senderNameEl.addEventListener('input', () => {
+      AppState.senderName = senderNameEl.value;
+      localStorage.setItem('senderName', senderNameEl.value);
+    });
+  }
 
   // Delay
   ['delay-min','delay-max'].forEach(id => document.getElementById(id).addEventListener('input', () => Delay.updateVisual()));
