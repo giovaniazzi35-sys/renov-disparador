@@ -412,11 +412,39 @@ async function ensureConfig() {
 }
 app.use(async (req, res, next) => { await ensureConfig(); next(); });
 
-// Histórico de conversa por contato (em memória — reseta ao reiniciar)
+// Histórico de conversa por contato — cache em memória + persistência no Supabase
 const conversationHistory = new Map(); // phone → [{role,content}]
 // Buffer para juntar mensagens seguidas do mesmo contato antes de responder
 const msgBuffer = new Map(); // phone → { texts: [], seq: 0 }
-const MAX_HISTORY = 12; // mensagens mantidas por contato
+
+// Carrega histórico do Supabase se ainda não está em memória (sobrevive a cold starts)
+async function loadConversation(phone) {
+  if (conversationHistory.has(phone)) return;
+  if (!SUPABASE_URL || !SUPABASE_KEY) { conversationHistory.set(phone, []); return; }
+  try {
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?phone=eq.${phone}&select=messages,disabled`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    if (r.ok && Array.isArray(rows) && rows[0]) {
+      conversationHistory.set(phone, Array.isArray(rows[0].messages) ? rows[0].messages : []);
+      if (rows[0].disabled) disabledNumbers.add(phone); else disabledNumbers.delete(phone);
+      return;
+    }
+  } catch (err) { console.warn('loadConversation error:', err.message); }
+  conversationHistory.set(phone, []);
+}
+
+// Salva histórico no Supabase (fire-and-forget)
+function saveConversation(phone) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  const messages = conversationHistory.get(phone) || [];
+  proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations`, {
+    method: 'POST',
+    headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ phone, messages, disabled: disabledNumbers.has(phone), updated_at: new Date().toISOString() }),
+  }).then(r => { if (!r.ok) console.warn('saveConversation failed:', r.status); })
+    .catch(err => console.warn('saveConversation error:', err.message));
+}
+const MAX_HISTORY = 30; // mensagens mantidas por contato
 
 // ── Google Calendar helpers ───────────────────────────────────
 
@@ -623,52 +651,71 @@ function isAudioMessage(data) {
   return !!(m.audioMessage || m.pttMessage || m.documentMessage?.mimetype?.startsWith('audio'));
 }
 
-async function transcribeAudio(data, apiKey, instanceToken) {
-  try {
-    // Tenta obter base64 do áudio via Evolution API
-    const msgKey = data?.key;
-    const token = instanceToken || agentConfig.instanceToken;
-    if (!msgKey || !token) return null;
+// Busca o base64 do áudio: primeiro no próprio payload (Evolution Go pode embutir),
+// depois via endpoint de mídia da Evolution API
+async function getAudioBase64(data, rawPayload, token) {
+  // 1. Base64 embutido no webhook (config "webhook base64" da Evolution)
+  const inline = rawPayload?.Base64 || rawPayload?.base64 || data?.base64
+    || data?.message?.base64 || data?.message?.audioMessage?.base64;
+  if (inline && typeof inline === 'string' && inline.length > 100) return inline;
 
+  // 2. Endpoint de download de mídia
+  if (!data?.key || !token) return null;
+  try {
     const mediaRes = await proxyFetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage`, {
       method: 'POST',
       headers: { apikey: token },
-      body: JSON.stringify({ key: msgKey, convertToMp4: false }),
+      body: JSON.stringify({ key: data.key, message: data.message, convertToMp4: false }),
     });
-    if (!mediaRes.ok) return null;
+    if (!mediaRes.ok) {
+      console.warn(`[AUDIO] download de mídia falhou (${mediaRes.status})`);
+      return null;
+    }
     const mediaData = await mediaRes.json();
-    const base64 = mediaData?.base64 || mediaData?.data;
+    return mediaData?.base64 || mediaData?.data || mediaData?.media || null;
+  } catch (err) {
+    console.warn('[AUDIO] erro no download:', err.message);
+    return null;
+  }
+}
+
+async function transcribeAudio(data, apiKey, instanceToken, rawPayload) {
+  try {
+    const token = instanceToken || agentConfig.instanceToken;
+    const base64 = await getAudioBase64(data, rawPayload, token);
     if (!base64) return null;
 
-    // Transcreve usando Gemini Flash via OpenRouter (suporta áudio em base64)
-    const m = data?.message || {};
-    const mime = m.audioMessage?.mimetype || m.pttMessage?.mimetype || 'audio/ogg; codecs=opus';
-    const cleanMime = mime.split(';')[0].trim();
+    // Modelos com suporte a áudio: Gemini gratuitos da lista ao vivo primeiro
+    const liveFree = await getLiveFreeModels(apiKey);
+    const audioModels = [
+      ...liveFree.filter(m => m.includes('gemini')),
+      'google/gemini-2.5-flash-lite', // fallback pago barato caso não haja gemini free
+    ];
 
-    const body = JSON.stringify({
-      model: 'google/gemini-flash-1.5',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Transcreva exatamente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.' },
-          { type: 'image_url', image_url: { url: `data:${cleanMime};base64,${base64}` } },
-        ],
-      }],
-      max_tokens: 1000,
-    });
+    const content = [
+      { type: 'text', text: 'Transcreva exatamente o que foi dito neste áudio em português brasileiro. Retorne apenas a transcrição, sem comentários.' },
+      { type: 'input_audio', input_audio: { data: base64.replace(/^data:[^,]+,/, ''), format: 'ogg' } },
+    ];
 
-    const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://renov-disparador.vercel.app',
-        'X-Title': 'Renov Agente IA',
-      },
-      body,
-    });
-    const d = await r.json();
-    return d?.choices?.[0]?.message?.content?.trim() || null;
+    for (const model of audioModels) {
+      try {
+        const r = await proxyFetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://renov-disparador.vercel.app',
+            'X-Title': 'Renov Agente IA',
+          },
+          body: JSON.stringify({ model, max_tokens: 1000, messages: [{ role: 'user', content }] }),
+        });
+        const d = await r.json();
+        if (!r.ok) { console.warn(`[AUDIO] ${model} falhou: ${d?.error?.message || r.status}`); continue; }
+        const out = d?.choices?.[0]?.message?.content?.trim();
+        if (out) return out;
+      } catch (err) { console.warn(`[AUDIO] ${model} erro: ${err.message}`); }
+    }
+    return null;
   } catch (err) {
     console.error('Transcribe audio error:', err.message);
     return null;
@@ -906,6 +953,9 @@ app.post('/api/agent/webhook', async (req, res) => {
     const from = remoteJid.replace(/@[\w.]+$/, '');
     if (!from) return;
 
+    // Carrega histórico persistido (Supabase) — mantém memória entre cold starts
+    await loadConversation(from);
+
     // Verifica se IA está desativada para este número
     if (disabledNumbers.has(from)) return;
 
@@ -918,7 +968,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     // Transcreve áudio se necessário
     if (!text && isAudioMessage(msgData)) {
       console.log(`[${ts}] 🎙 Áudio recebido de ${from} — transcrevendo...`);
-      const transcription = await transcribeAudio(msgData, key, sendToken);
+      const transcription = await transcribeAudio(msgData, key, sendToken, picked);
       if (transcription) {
         text = `[Áudio transcrito]: ${transcription}`;
         console.log(`[${ts}] 🎙 Transcrição: ${transcription.slice(0, 80)}`);
@@ -966,7 +1016,11 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     // Monta system prompt — injeta slots disponíveis se agendamento ativo
     let sysBase = [agentConfig.prompt || '', agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''].join('').trim();
-    sysBase += '\n\nIMPORTANTE: A mensagem do usuário pode conter várias mensagens juntas (separadas por quebra de linha). Responda tudo em UMA única resposta curta e objetiva — máximo 3 frases, sem textos longos.';
+    sysBase += '\n\nIMPORTANTE:\n'
+      + '- A mensagem do usuário pode conter várias mensagens juntas (separadas por quebra de linha). Responda tudo em UMA única resposta curta e objetiva — máximo 3 frases.\n'
+      + '- NUNCA repita uma saudação ou mensagem que você já enviou nesta conversa. Leia o histórico e continue de onde parou.\n'
+      + '- Responda diretamente ao que a pessoa disse, de forma natural e humana, como num papo de WhatsApp. Nada de textos genéricos ou robotizados.\n'
+      + '- Se a pessoa já se apresentou ou já respondeu algo, não pergunte de novo.';
 
     if (agentConfig.schedulingEnabled) {
       let slotsText = '';
@@ -1005,9 +1059,10 @@ app.post('/api/agent/webhook', async (req, res) => {
     const reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
     if (!reply) return;
 
-    // Adiciona resposta ao histórico
+    // Adiciona resposta ao histórico e persiste no Supabase
     history.push({ role: 'assistant', content: reply });
     if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+    saveConversation(from);
 
     // Detecta marcador de agendamento
     const scheduleTag = parseScheduleTag(reply);
@@ -1026,11 +1081,12 @@ app.post('/api/agent/webhook', async (req, res) => {
       }
     }
 
-    // Envia resposta principal
+    // Envia resposta principal — delay de "digitando" proporcional ao tamanho (mais humano)
+    const typingMs = Math.min(9000, 2500 + cleanReply.length * 35);
     const sendRes = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
       method: 'POST',
       headers: { apikey: sendToken },
-      body: JSON.stringify({ number: from, text: cleanReply, delay: 1500 }),
+      body: JSON.stringify({ number: from, text: cleanReply, delay: typingMs }),
     });
     if (!sendRes.ok) {
       const errBody = await sendRes.text().catch(() => '');
@@ -1054,8 +1110,27 @@ app.post('/api/agent/webhook', async (req, res) => {
   }
 });
 
-// Lista conversas ativas
-app.get('/api/agent/conversations', requireAuth, (req, res) => {
+// Lista conversas ativas — lê do Supabase para sobreviver a cold starts
+app.get('/api/agent/conversations', requireAuth, async (req, res) => {
+  try {
+    if (SUPABASE_URL && SUPABASE_KEY) {
+      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?select=phone,messages,disabled&order=updated_at.desc&limit=50`, { method: 'GET', headers: SB_HEADERS });
+      const rows = await r.json();
+      if (r.ok && Array.isArray(rows)) {
+        const list = rows.map(row => {
+          const msgs = Array.isArray(row.messages) ? row.messages : [];
+          return {
+            phone: row.phone,
+            msgCount: msgs.length,
+            lastMsg: msgs.filter(m => m.role === 'user').slice(-1)[0]?.content?.slice(0, 60) || '',
+            disabled: !!row.disabled,
+          };
+        });
+        return res.json({ ok: true, conversations: list });
+      }
+    }
+  } catch (err) { console.warn('conversations list error:', err.message); }
+  // Fallback: memória local
   const list = [];
   conversationHistory.forEach((msgs, phone) => {
     list.push({
@@ -1069,23 +1144,33 @@ app.get('/api/agent/conversations', requireAuth, (req, res) => {
   res.json({ ok: true, conversations: list });
 });
 
-// Ativa/desativa IA para um número específico
-app.post('/api/agent/conversation-toggle', requireAuth, (req, res) => {
+// Ativa/desativa IA para um número específico — persiste no Supabase
+app.post('/api/agent/conversation-toggle', requireAuth, async (req, res) => {
   const { phone, disabled } = req.body;
   if (!phone) return res.status(400).json({ error: 'phone obrigatório' });
-  if (disabled) {
-    disabledNumbers.add(phone);
-  } else {
-    disabledNumbers.delete(phone);
+  if (disabled) disabledNumbers.add(phone); else disabledNumbers.delete(phone);
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations`, {
+        method: 'POST',
+        headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ phone, disabled: !!disabled, updated_at: new Date().toISOString() }),
+      });
+    } catch (err) { console.warn('toggle persist error:', err.message); }
   }
   res.json({ ok: true, phone, disabled: disabledNumbers.has(phone) });
 });
 
-// Apaga histórico de conversa de um número
-app.delete('/api/agent/conversation/:phone', requireAuth, (req, res) => {
+// Apaga histórico de conversa de um número — também no Supabase
+app.delete('/api/agent/conversation/:phone', requireAuth, async (req, res) => {
   const phone = req.params.phone;
   conversationHistory.delete(phone);
   disabledNumbers.delete(phone);
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?phone=eq.${phone}`, { method: 'DELETE', headers: SB_HEADERS });
+    } catch (err) { console.warn('conversation delete error:', err.message); }
+  }
   res.json({ ok: true });
 });
 
