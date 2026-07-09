@@ -414,6 +414,8 @@ app.use(async (req, res, next) => { await ensureConfig(); next(); });
 
 // Histórico de conversa por contato (em memória — reseta ao reiniciar)
 const conversationHistory = new Map(); // phone → [{role,content}]
+// Buffer para juntar mensagens seguidas do mesmo contato antes de responder
+const msgBuffer = new Map(); // phone → { texts: [], seq: 0 }
 const MAX_HISTORY = 12; // mensagens mantidas por contato
 
 // ── Google Calendar helpers ───────────────────────────────────
@@ -524,18 +526,32 @@ async function createCalendarEvent(accessToken, calendarId, slotUtc, clientPhone
   return data?.conferenceData?.entryPoints?.[0]?.uri || data?.hangoutLink || null;
 }
 
-// Modelos gratuitos de reserva — se o escolhido falhar, tenta o próximo
-const FALLBACK_MODELS = [
-  'deepseek/deepseek-chat-v3-0324:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-];
+// Lista de modelos gratuitos consultada ao vivo (cache 10 min) —
+// slugs fixos quebram porque o OpenRouter muda quais modelos são :free
+let _freeModelsCache = { ts: 0, list: [] };
+async function getLiveFreeModels(apiKey) {
+  if (_freeModelsCache.list.length && Date.now() - _freeModelsCache.ts < 10 * 60 * 1000) {
+    return _freeModelsCache.list;
+  }
+  try {
+    const r = await proxyFetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET', headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const d = await r.json();
+    if (r.ok) {
+      const list = (d.data || []).filter(m => m.id && m.id.endsWith(':free')).map(m => m.id);
+      if (list.length) _freeModelsCache = { ts: Date.now(), list };
+      return list;
+    }
+  } catch (_) {}
+  return _freeModelsCache.list;
+}
 
 async function callOpenRouter(apiKey, model, systemPrompt, messages) {
-  const primary = model || FALLBACK_MODELS[0];
-  const chain = [primary, ...FALLBACK_MODELS.filter(m => m !== primary)];
+  const liveFree = await getLiveFreeModels(apiKey);
+  const primary = model || liveFree[0] || 'deepseek/deepseek-chat-v3-0324:free';
+  // Tenta o modelo escolhido + até 6 gratuitos atuais da lista ao vivo
+  const chain = [primary, ...liveFree.filter(m => m !== primary).slice(0, 6)];
   const msgPayload = [
     { role: 'system', content: systemPrompt || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.' },
     ...messages,
@@ -552,7 +568,7 @@ async function callOpenRouter(apiKey, model, systemPrompt, messages) {
           'HTTP-Referer': 'https://renov-disparador.vercel.app',
           'X-Title': 'Renov Agente IA',
         },
-        body: JSON.stringify({ model: m, temperature: 0.7, max_tokens: 400, messages: msgPayload }),
+        body: JSON.stringify({ model: m, temperature: 0.7, max_tokens: 300, messages: msgPayload }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error?.message || `OpenRouter ${r.status}`);
@@ -924,14 +940,33 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 80)}`);
 
+    // ── Buffer de mensagens: espera 15–30s para juntar mensagens seguidas
+    // do mesmo contato e responder tudo de uma vez ──
+    let buf = msgBuffer.get(from);
+    if (!buf) { buf = { texts: [], seq: 0 }; msgBuffer.set(from, buf); }
+    buf.texts.push(text);
+    buf.seq++;
+    const mySeq = buf.seq;
+    const waitMs = 15000 + Math.floor(Math.random() * 15000); // 15–30s
+    await new Promise(r => setTimeout(r, waitMs));
+    // Se chegou mensagem mais nova durante a espera, essa invocação desiste —
+    // a invocação da última mensagem responde tudo junto
+    if (buf.seq !== mySeq) {
+      console.log(`[WEBHOOK] ${from}: mensagem agregada ao buffer, aguardando a última`);
+      return;
+    }
+    const combined = buf.texts.join('\n');
+    buf.texts = [];
+
     // Mantém histórico de conversa por contato
     if (!conversationHistory.has(from)) conversationHistory.set(from, []);
     const history = conversationHistory.get(from);
-    history.push({ role: 'user', content: text });
+    history.push({ role: 'user', content: combined });
     if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
 
     // Monta system prompt — injeta slots disponíveis se agendamento ativo
     let sysBase = [agentConfig.prompt || '', agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''].join('').trim();
+    sysBase += '\n\nIMPORTANTE: A mensagem do usuário pode conter várias mensagens juntas (separadas por quebra de linha). Responda tudo em UMA única resposta curta e objetiva — máximo 3 frases, sem textos longos.';
 
     if (agentConfig.schedulingEnabled) {
       let slotsText = '';
