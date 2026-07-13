@@ -1197,12 +1197,27 @@ app.post('/api/agent/webhook', async (req, res) => {
       sysBase += slotsText;
     }
 
-    const reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
-    // Se o modelo não respondeu, ainda persiste o status detectado por palavra-chave
+    // Gera a resposta — NUNCA deixa o lead sem devolutiva:
+    // 1ª camada: cadeia de modelos (primário + gratuitos ao vivo)
+    // 2ª camada: repete a cadeia inteira após 3s
+    // 3ª camada: resposta de segurança pré-definida
+    let reply = null;
+    for (let round = 1; round <= 2 && !reply; round++) {
+      try {
+        reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
+      } catch (err) {
+        console.warn(`[MODELO] rodada ${round} falhou por completo: ${err.message}`);
+        if (round < 2) await new Promise(r => setTimeout(r, 3000));
+      }
+    }
     if (!reply) {
-      if (conversationStatus.get(from) && conversationStatus.get(from) !== prevStatusEarly) saveConversation(from);
-      console.warn(`[${ts}] ⚠ modelo sem resposta para ${from} — status preservado`);
-      return;
+      const canned = [
+        'Opa! Recebi sua mensagem 👍 Já te retorno em instantes.',
+        'Oi! Vi sua mensagem aqui — me dá só um minutinho que já te respondo.',
+        'Recebi aqui! Só um momento que já te dou um retorno certinho.',
+      ];
+      reply = canned[Math.floor(Math.random() * canned.length)];
+      console.warn(`[${ts}] 🛟 todos os modelos falharam — resposta de segurança enviada para ${from}`);
     }
 
     // Refina a classificação com o marcador do modelo (a heurística já rodou antes)
@@ -1253,16 +1268,25 @@ app.post('/api/agent/webhook', async (req, res) => {
     }
 
     // Envia resposta principal — delay de "digitando" proporcional ao tamanho (mais humano)
+    // Até 3 tentativas: a devolutiva PRECISA chegar
     const typingMs = Math.min(9000, 2500 + cleanReply.length * 35);
-    const sendRes = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-      method: 'POST',
-      headers: { apikey: sendToken },
-      body: JSON.stringify({ number: from, text: cleanReply, delay: typingMs }),
-    });
-    if (!sendRes.ok) {
-      const errBody = await sendRes.text().catch(() => '');
-      console.error(`[WEBHOOK] falha ao enviar resposta (${sendRes.status}): ${errBody.slice(0, 300)}`);
+    let sent = false;
+    for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
+      try {
+        const sendRes = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
+          method: 'POST',
+          headers: { apikey: sendToken },
+          body: JSON.stringify({ number: from, text: cleanReply, delay: attempt === 1 ? typingMs : 1000 }),
+        });
+        if (sendRes.ok) { sent = true; break; }
+        const errBody = await sendRes.text().catch(() => '');
+        console.error(`[WEBHOOK] envio tentativa ${attempt} falhou (${sendRes.status}): ${errBody.slice(0, 300)}`);
+      } catch (err) {
+        console.error(`[WEBHOOK] envio tentativa ${attempt} erro: ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 2000));
     }
+    if (!sent) console.error(`[WEBHOOK] 🚨 FALHA DEFINITIVA ao responder ${from} após 3 tentativas`);
 
     // Envia link do Meet separado
     if (meetLink) {
