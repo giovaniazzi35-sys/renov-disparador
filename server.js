@@ -95,6 +95,7 @@ function proxyFetch(url, options = {}, _redirects = 0) {
         status: res.statusCode,
         ok: res.statusCode >= 200 && res.statusCode < 300,
         json: () => { try { return Promise.resolve(JSON.parse(body)); } catch (_) { return Promise.resolve({ error: body }); } },
+        text: () => Promise.resolve(body),
       }));
     });
     req.on('error', reject);
@@ -988,8 +989,15 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (webhookLog.length > 30) webhookLog.shift();
     console.log(`[WEBHOOK] event="${rawEvent}" keys=${Object.keys(req.body || {}).join(',')}`);
 
-    // Token: usa o da config, ou o que a própria Evolution Go manda no webhook
-    const sendToken = agentConfig.instanceToken || req.body?.instanceToken || '';
+    // Token: prioriza o que a própria Evolution manda no webhook (sempre atual,
+    // mesmo quando o token rotaciona ao reparear o QR) — config é fallback
+    const sendToken = req.body?.instanceToken || agentConfig.instanceToken || '';
+    // Auto-cura: se o token do webhook difere do salvo, atualiza a config
+    if (req.body?.instanceToken && agentConfig.instanceToken && req.body.instanceToken !== agentConfig.instanceToken) {
+      agentConfig.instanceToken = req.body.instanceToken;
+      saveAgentConfig(agentConfig);
+      console.log('[WEBHOOK] token da instância rotacionou — config atualizada automaticamente');
+    }
     if (!agentConfig.active || !sendToken) {
       console.log(`[WEBHOOK] ignorado — active=${agentConfig.active} token=${!!sendToken}`);
       return;
@@ -1086,7 +1094,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     buf.texts.push(text);
     buf.seq++;
     const mySeq = buf.seq;
-    const waitMs = 15000 + Math.floor(Math.random() * 15000); // 15–30s
+    const waitMs = 20000; // 20s juntando mensagens antes de responder
     await new Promise(r => setTimeout(r, waitMs));
     // Se chegou mensagem mais nova durante a espera, essa invocação desiste —
     // a invocação da última mensagem responde tudo junto
