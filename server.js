@@ -99,6 +99,8 @@ function proxyFetch(url, options = {}, _redirects = 0) {
       }));
     });
     req.on('error', reject);
+    // Timeout: uma chamada travada não pode consumir o tempo da função serverless
+    req.setTimeout(options.timeoutMs || 20000, () => req.destroy(new Error('timeout de requisição')));
     if (bodyStr) req.write(bodyStr);
     req.end();
   });
@@ -602,8 +604,9 @@ async function getLiveFreeModels(apiKey) {
 async function callOpenRouter(apiKey, model, systemPrompt, messages) {
   const liveFree = await getLiveFreeModels(apiKey);
   const primary = model || liveFree[0] || 'deepseek/deepseek-chat-v3-0324:free';
-  // Tenta o modelo escolhido + até 6 gratuitos atuais da lista ao vivo
-  const chain = [primary, ...liveFree.filter(m => m !== primary).slice(0, 6)];
+  // Tenta o modelo escolhido + até 4 gratuitos atuais da lista ao vivo
+  // (limitado para caber no tempo máximo da função serverless)
+  const chain = [primary, ...liveFree.filter(m => m !== primary).slice(0, 4)];
   const msgPayload = [
     { role: 'system', content: systemPrompt || 'Você é um assistente de qualificação comercial. Responda de forma curta, objetiva e sem inventar informações.' },
     ...messages,
@@ -979,9 +982,10 @@ app.post('/api/agent/toggle', requireAuth, (req, res) => {
   res.json({ ok: true, active: agentConfig.active });
 });
 
-// Webhook público — Evolution Go posta aqui sem autenticação
+// Webhook público — Evolution Go posta aqui sem autenticação.
+// IMPORTANTE: a resposta HTTP só é enviada ao FINAL do processamento —
+// no Vercel, responder cedo congela a função e mata o buffer/modelo/envio.
 app.post('/api/agent/webhook', async (req, res) => {
-  res.status(200).json({ ok: true }); // responde imediatamente
   try {
     // Salva payload bruto para debug
     const rawEvent = req.body?.event || req.body?.type || '';
@@ -1302,6 +1306,9 @@ app.post('/api/agent/webhook', async (req, res) => {
     console.log(`[${ts}] 🤖 Agente respondeu para ${from}: ${cleanReply.slice(0, 60)}`);
   } catch (err) {
     console.error('Agente IA erro:', err.message);
+  } finally {
+    // Responde à Evolution só agora — mantém a função viva durante todo o fluxo
+    if (!res.headersSent) res.status(200).json({ ok: true });
   }
 });
 
