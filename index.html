@@ -2722,17 +2722,40 @@ const Agent = {
     const sel = document.getElementById('agent-instance-select');
     try {
       const instances = await API.getAllInstances();
+      this._instances = instances;
       sel.innerHTML = instances.length
         ? '<option value="">— Selecione —</option>'
         : '<option value="">Nenhuma instância encontrada</option>';
       instances.forEach(inst => {
         const opt = document.createElement('option');
         opt.value = inst.name;
-        opt.textContent = inst.name + (inst.connected ? ' ✓' : '');
+        opt.textContent = inst.name + (inst.connected ? ' ✓' : ' ⚠ desconectada');
         sel.appendChild(opt);
       });
+      this.checkInstanceConnection();
     } catch (err) {
       UI.addBanner('error', 'Erro ao carregar instâncias: ' + err.message);
+    }
+  },
+
+  // Avisa em destaque se a instância escolhida caiu do WhatsApp
+  checkInstanceConnection() {
+    const sel = document.getElementById('agent-instance-select');
+    const name = sel?.value;
+    let warnEl = document.getElementById('agent-conn-warning');
+    if (!warnEl) {
+      warnEl = document.createElement('div');
+      warnEl.id = 'agent-conn-warning';
+      warnEl.style.cssText = 'display:none;margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#f87171;font-size:13px;font-weight:600';
+      sel?.closest('.card, section, div')?.appendChild(warnEl);
+    }
+    const inst = (this._instances || []).find(i => i.name === name);
+    if (name && inst && !inst.connected) {
+      warnEl.style.display = 'block';
+      warnEl.textContent = '⚠ A instância "' + name + '" está DESCONECTADA do WhatsApp — o agente não recebe nem responde mensagens. Vá na aba Disparador e escaneie o QR code para reconectar.';
+      this.addLog('Instância "' + name + '" desconectada do WhatsApp — reconecte pelo QR code', 'err');
+    } else {
+      warnEl.style.display = 'none';
     }
   },
 
@@ -2798,6 +2821,7 @@ const Agent = {
       if (!j.ok) return;
       const d = j.data;
       document.getElementById('agent-instance-select').value = d.instanceName || '';
+      this.checkInstanceConnection();
       document.getElementById('agent-token').value = d.instanceToken || '';
       if (d.model) document.getElementById('agent-model').value = d.model;
       // Restaura playbook selecionado (ou padrão 0)
@@ -3250,6 +3274,7 @@ const Agent = {
       const saved = localStorage.getItem('token:' + e.target.value);
       if (saved) document.getElementById('agent-token').value = saved;
       document.getElementById('agent-instance-label').textContent = e.target.value ? '📱 ' + e.target.value : '';
+      this.checkInstanceConnection();
     };
 
     document.getElementById('btn-refresh-convs').onclick = () => this.loadConversations();
