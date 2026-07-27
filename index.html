@@ -2152,7 +2152,9 @@ const Dispatch = {
       }
       UI.updateProgress(i + 1, total);
 
-      if (i < total - 1 && !AppState.stopRequested) {
+      // Só aguarda o intervalo entre envios BEM-SUCEDIDOS.
+      // Se deu erro, pula direto para o próximo número (sem contar o tempo).
+      if (result.ok && i < total - 1 && !AppState.stopRequested) {
         const d = Delay.getRandom(minMs, maxMs);
         totalDelay += d; delayCount++;
         await Delay.sleep(d);
