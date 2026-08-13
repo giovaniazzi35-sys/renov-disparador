@@ -1658,6 +1658,11 @@ const Instances = {
     const lbl = document.getElementById('instance-status-label');
     if (dot) { dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected'); }
     if (lbl) { lbl.textContent = connected ? 'Conectado' : 'Desconectado'; }
+    const badge = document.getElementById('conn-badge');
+    if (badge) {
+      badge.className = 'conn-badge ' + (connected ? 'connected' : 'disconnected');
+      badge.textContent = connected ? ('● Conectado' + (phone ? ' — ' + phone : '')) : '● Desconectado';
+    }
   },
 
   _extractPhone(data) {
@@ -1688,6 +1693,7 @@ const Instances = {
       const data = await API.getStatus(token);
       const d = data?.data || data?.instance || data || {};
       const connected = d.connected || d.loggedIn
+                     || d.Connected || d.LoggedIn
                      || d.connectionStatus === 'open'
                      || d.state === 'open'
                      || d.status === 'Connected'
