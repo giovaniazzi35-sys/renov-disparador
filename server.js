@@ -281,25 +281,17 @@ app.post('/api/send/media-upload', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   }
   logReq('POST', '/api/send/media-upload', number);
+  // Evolution Go: base64 vai no campo "url" (sem o prefixo data:...;base64,)
   const base64Data = mediaBase64.replace(/^data:[^;]+;base64,/, '');
   const resolvedMime = mimetype || guessMime(mediaType, filename);
+  // Áudio (inclusive PTT) usa type "audio" — o /send/audio não existe nesta versão
+  const evoType = ptt ? 'audio' : mediaType;
   try {
-    // Áudio PTT (gravação de voz)
-    if (ptt) {
-      const up = await proxyFetch(`${EVOLUTION_URL}/send/audio`, {
-        method: 'POST', headers: { apikey: instanceToken },
-        body: JSON.stringify({ number, audio: base64Data, encoding: true }),
-      });
-      const body = await up.json().catch(() => ({}));
-      if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
-      return res.status(up.status).json(body);
-    }
-    // Outros tipos de mídia
     const up = await proxyFetch(`${EVOLUTION_URL}/send/media`, {
       method: 'POST', headers: { apikey: instanceToken },
       body: JSON.stringify({
-        number, type: mediaType,
-        media: base64Data,
+        number, type: evoType,
+        url: base64Data,
         mimetype: resolvedMime,
         caption: caption || '',
         filename: filename || `arquivo.${resolvedMime.split('/')[1] || 'bin'}`,
