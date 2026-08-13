@@ -1733,9 +1733,20 @@ const Instances = {
     const token = this.getToken();
     if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
     await API.connectInstance(token, window.location.protocol + '//' + window.location.host + '/api/agent/webhook');
-    const data = await API.getQR(token);
-    const code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
-    if (!code) { UI.addBanner('error', 'Não foi possível gerar o QR Code. Verifique o token e tente novamente.'); return; }
+
+    // A Evolution Go às vezes demora alguns segundos para o QR ficar pronto
+    // (ou está temporariamente limitando pareamentos) — tenta algumas vezes.
+    let code = null, lastErr = '';
+    for (let i = 0; i < 6 && !code; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 2500));
+      const data = await API.getQR(token);
+      code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
+      lastErr = data?.data?.error || data?.error || '';
+    }
+    if (!code) {
+      UI.addBanner('error', `Não foi possível gerar o QR Code${lastErr ? ': ' + lastErr : ''}. O WhatsApp pode estar limitando novos pareamentos temporariamente — aguarde alguns minutos e tente novamente.`);
+      return;
+    }
 
     document.getElementById('qr-img').src = code;
     document.getElementById('modal-qr-section').classList.remove('hidden');
