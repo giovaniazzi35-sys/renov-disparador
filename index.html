@@ -814,6 +814,20 @@
         <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
       </div>
 
+      <!-- Conexão / criação de instância -->
+      <div class="conn-card">
+        <div class="row-between" style="margin-bottom:12px">
+          <div class="card-title" style="margin:0;font-size:14px">Conectar WhatsApp</div>
+          <span class="conn-badge disconnected" id="conn-badge">● —</span>
+        </div>
+        <div class="card-sub" style="margin-bottom:12px">Não tem instância? Crie uma nova e conecte lendo o QR code — o token é gerado e salvo automaticamente. Cada instância fica reservada à sua conta.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn-primary btn-sm" id="btn-create-instance">➕ Criar nova instância</button>
+          <button class="btn-ghost btn-sm" id="btn-show-qr">📷 Gerar QR (token atual)</button>
+          <button class="btn-ghost btn-sm" id="btn-check-conn">✓ Verificar conexão</button>
+          <button class="btn-ghost btn-sm" id="btn-disconnect-inst">⏏ Desconectar</button>
+        </div>
+      </div>
 
     </div>
 
@@ -1576,10 +1590,12 @@ const Instances = {
         ? '<option value="">— Selecione —</option>'
         : '<option value="">Nenhuma instância encontrada</option>';
       instances.forEach(inst => {
+        // Guarda o token vindo do servidor (auto-captura para os disparos)
+        if (inst.token) localStorage.setItem(`token:${inst.name}`, inst.token);
         const opt = document.createElement('option');
         opt.value = inst.name || inst.id;
         opt.dataset.connected = inst.connected ? '1' : '0';
-        opt.textContent = inst.name || inst.id;
+        opt.textContent = (inst.name || inst.id) + (inst.connected ? ' ✓' : ' ⚠');
         sel.appendChild(opt);
       });
       if (instances.length === 1) {
@@ -1590,6 +1606,35 @@ const Instances = {
       UI.addBanner('error', `Erro ao carregar instâncias: ${err.message}`);
     } finally {
       btn.disabled = false; btn.textContent = '↺ Carregar';
+    }
+  },
+
+  // Cria uma nova instância reservada ao usuário e já mostra o QR
+  async createInstance() {
+    const btn = document.getElementById('btn-create-instance');
+    const nome = (prompt('Nome para a nova instância (ex: minha-empresa):', 'renov') || '').trim();
+    if (nome === '') return;
+    btn.disabled = true; btn.textContent = '⏳ Criando...';
+    try {
+      const res = await fetch('/api/instance/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nome }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      // Salva o token e seleciona a nova instância
+      localStorage.setItem(`token:${j.name}`, j.token);
+      document.getElementById('instance-token').value = j.token;
+      const sel = document.getElementById('instance-select');
+      const opt = document.createElement('option');
+      opt.value = j.name; opt.textContent = j.name + ' ⚠'; sel.appendChild(opt);
+      sel.value = j.name;
+      UI.addBanner('info', `✓ Instância "${j.name}" criada! Escaneie o QR para conectar.`);
+      await this.showQR();
+    } catch (err) {
+      UI.addBanner('error', `Erro ao criar instância: ${err.message}`);
+    } finally {
+      btn.disabled = false; btn.textContent = '➕ Criar nova instância';
     }
   },
 
@@ -1681,9 +1726,9 @@ const Instances = {
   async showQR() {
     const token = this.getToken();
     if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
-    await API.connectInstance(token, '');
+    await API.connectInstance(token, window.location.protocol + '//' + window.location.host + '/api/agent/webhook');
     const data = await API.getQR(token);
-    const code = data?.data?.code;
+    const code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
     if (!code) { UI.addBanner('error', 'Não foi possível gerar o QR Code. Verifique o token e tente novamente.'); return; }
 
     document.getElementById('qr-img').src = code;
@@ -1709,7 +1754,7 @@ const Instances = {
     const token = this.getToken();
     if (!token) return;
     const data = await API.getQR(token);
-    const code = data?.data?.code;
+    const code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
     if (code) {
       document.getElementById('qr-img').src = code;
       clearInterval(AppState.qrTimer);
@@ -2359,6 +2404,10 @@ function init() {
   _wire('btn-request-pair', () => Instances.requestPairCode());
   _wire('btn-disconnect', () => Instances.logout());
   _wire('btn-restart-inst', () => Instances.restart());
+  // Novos botões de conexão do Step 1
+  _wire('btn-create-instance', () => Instances.createInstance());
+  _wire('btn-check-conn', () => Instances.checkStatus(false));
+  _wire('btn-disconnect-inst', () => Instances.logout());
 
   // Modal
   document.getElementById('btn-modal-close').onclick = () => {
@@ -2743,6 +2792,8 @@ const Agent = {
         ? '<option value="">— Selecione —</option>'
         : '<option value="">Nenhuma instância encontrada</option>';
       instances.forEach(inst => {
+        // Auto-captura o token da instância do usuário
+        if (inst.token) localStorage.setItem(`token:${inst.name}`, inst.token);
         const opt = document.createElement('option');
         opt.value = inst.name;
         opt.textContent = inst.name + (inst.connected ? ' ✓' : ' ⚠ desconectada');

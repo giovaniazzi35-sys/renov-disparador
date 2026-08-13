@@ -257,13 +257,79 @@ function translateEvolutionError(status, body) {
 
 // ── API ──────────────────────────────────────────────────────
 
+// URL do webhook do agente (mesma origem do app)
+function appWebhookUrl(req) {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  return `${proto}://${req.get('host')}/api/agent/webhook`;
+}
+
+// Lista APENAS as instâncias do usuário logado (isolamento total entre contas)
 app.get('/api/instances', requireAuth, async (req, res) => {
-  logReq('GET', '/api/instances');
+  logReq('GET', '/api/instances', req.session.email);
   try {
+    const cfg = await getUserConfig(req.session.email);
+    let owned = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
+    // Migra a instância legada do usuário (ex.: giovani) para o modelo de posse
+    if (cfg.instanceName && cfg.instanceToken && !owned.some(o => o.name === cfg.instanceName)) {
+      owned = [...owned, { name: cfg.instanceName, token: cfg.instanceToken }];
+      cfg.ownedInstances = owned; putUserConfig(req.session.email, cfg);
+    }
+    if (!owned.length) return res.json([]);
+
+    // Busca status ao vivo no Evolution e devolve só as do usuário
     const up = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
-    res.status(up.status).json(await up.json());
+    const all = await up.json().catch(() => []);
+    const rows = Array.isArray(all) ? all : (all.data || []);
+    const byName = new Map(rows.map(r => [r.name, r]));
+    const list = owned.map(o => {
+      const live = byName.get(o.name) || {};
+      return { name: o.name, token: o.token, connected: !!live.connected, jid: live.jid || '' };
+    });
+    res.json(list);
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
+
+// Cria uma NOVA instância reservada ao usuário logado — o app gera o token
+app.post('/api/instance/create', requireAuth, async (req, res) => {
+  const email = req.session.email;
+  const rawName = (req.body.name || 'renov').toString().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 18) || 'renov';
+  const suffix = require('crypto').randomBytes(3).toString('hex');
+  const name = `${rawName}_${suffix}`;
+  const token = require('crypto').randomUUID();
+  logReq('POST', '/api/instance/create', `${email} -> ${name}`);
+  try {
+    // 1. Cria a instância no Evolution (token definido por nós)
+    const cr = await proxyFetch(`${EVOLUTION_URL}/instance/create`, {
+      method: 'POST', headers: { apikey: GLOBAL_API_KEY },
+      body: JSON.stringify({ instanceName: name, name, token }),
+    });
+    const crBody = await cr.json().catch(() => ({}));
+    if (!cr.ok) return res.status(cr.status).json({ error: translateEvolutionError(cr.status, crBody) });
+
+    // 2. Conecta e registra o webhook do agente
+    await proxyFetch(`${EVOLUTION_URL}/instance/connect`, {
+      method: 'POST', headers: { apikey: token },
+      body: JSON.stringify({ webhookUrl: appWebhookUrl(req), subscribe: ['MESSAGE'] }),
+    });
+
+    // 3. Registra a posse na config do usuário
+    const cfg = await getUserConfig(email);
+    cfg.ownedInstances = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
+    cfg.ownedInstances.push({ name, token, createdAt: new Date().toISOString() });
+    putUserConfig(email, cfg);
+
+    res.json({ ok: true, name, token });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Verifica se o token pertence ao usuário logado (segurança das rotas por token)
+async function userOwnsToken(email, token) {
+  if (!token) return false;
+  const cfg = await getUserConfig(email);
+  const owned = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
+  if (owned.some(o => o.token === token)) return true;
+  return cfg.instanceToken === token; // instância legada do próprio usuário
+}
 
 app.post('/api/instance/connect', requireAuth, async (req, res) => {
   const { instanceToken, webhookUrl, subscribe } = req.body;
