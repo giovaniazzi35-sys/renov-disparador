@@ -16,6 +16,9 @@ const PORT           = parseInt(process.env.PORT) || 3000;
 const EVOLUTION_URL  = (process.env.EVOLUTION_URL || '').replace(/\/$/, '');
 const GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'renov-secret-2026';
+// Login com Google (OAuth de nível de aplicativo) — multiusuário
+const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 if (!EVOLUTION_URL || EVOLUTION_URL === 'https://SEU_IP_OU_DOMINIO') {
   console.error('\n  ❌  EVOLUTION_URL não configurada! Edite o arquivo .env.\n');
@@ -132,6 +135,70 @@ app.post('/login', (req, res) => {
 app.post('/logout', (req, res) => {
   req.session = null;
   res.redirect('/login');
+});
+
+// ── Login com Google (OAuth) — cada conta Google vira um usuário isolado ──
+function googleRedirectUri(req) {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  return `${proto}://${req.get('host')}/auth/google/callback`;
+}
+
+app.get('/auth/google', (req, res) => {
+  if (!GOOGLE_CLIENT_ID) return res.status(500).send('Login Google não configurado (GOOGLE_CLIENT_ID ausente).');
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: googleRedirectUri(req),
+    response_type: 'code',
+    scope: 'openid email profile',
+    access_type: 'online',
+    prompt: 'select_account',
+  });
+  res.redirect(url);
+});
+
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect('/login?erro=google');
+  try {
+    // Troca o código por token
+    const tokenRes = await proxyFetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: googleRedirectUri(req),
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || !tokenData.access_token) return res.redirect('/login?erro=google');
+
+    // Busca o e-mail do usuário
+    const userRes = await proxyFetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+    });
+    const profile = await userRes.json();
+    const email = (profile.email || '').trim().toLowerCase();
+    if (!email) return res.redirect('/login?erro=google');
+
+    req.session.loggedIn = true;
+    req.session.email = email;
+    req.session.name = profile.name || email;
+    req.session.picture = profile.picture || '';
+    logReq('GET', '/auth/google/callback', `login=${email}`);
+    res.redirect('/');
+  } catch (err) {
+    console.error('Google login erro:', err.message);
+    res.redirect('/login?erro=google');
+  }
+});
+
+// Retorna o usuário logado (para o frontend exibir nome/foto)
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({ ok: true, email: req.session.email, name: req.session.name || req.session.email, picture: req.session.picture || '' });
 });
 
 // ── Rotas protegidas ─────────────────────────────────────────
@@ -354,40 +421,91 @@ function autoActivate(cfg) {
   return cfg;
 }
 
-async function loadAgentConfig() {
-  // 1. Supabase (fonte principal — persiste entre deploys)
+// ── Multiusuário: cada e-mail Google tem sua própria config (linha própria) ──
+// O e-mail primário mapeia para a linha legada id=1 (mantém o agente atual vivo).
+const PRIMARY_EMAIL = (process.env.PRIMARY_EMAIL || 'giovaniazzi35@gmail.com').toLowerCase();
+
+function emailHash(email) {
+  // Inteiro positivo estável derivado do e-mail (evita colidir com id=1 legado)
+  let h = 5381;
+  const s = (email || '').toLowerCase();
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return 1000000 + (h % 900000000); // faixa bem acima de 1
+}
+function configIdFor(email) {
+  return (email && email.toLowerCase() === PRIMARY_EMAIL) ? 1 : emailHash(email);
+}
+
+// Carrega a config de um id específico do Supabase
+async function loadConfigById(id) {
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
-      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?id=eq.1&select=data`, { method: 'GET', headers: SB_HEADERS });
+      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?id=eq.${id}&select=data`, { method: 'GET', headers: SB_HEADERS });
       const rows = await r.json();
       if (r.ok && Array.isArray(rows) && rows[0]?.data && Object.keys(rows[0].data).length > 0) {
-        console.log('✅ Config carregado do Supabase');
         return autoActivate({ ...DEFAULT_CFG(), ...rows[0].data });
       }
-    } catch (err) { console.warn('Supabase load error:', err.message); }
+    } catch (err) { console.warn('loadConfigById error:', err.message); }
   }
-  // 2. Variável de ambiente legada
+  return null;
+}
+
+// Salva a config de um id específico (upsert)
+function saveConfigById(id, cfg) {
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config`, {
+      method: 'POST',
+      headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ id, data: cfg, updated_at: new Date().toISOString() }),
+    }).then(r => { if (!r.ok) console.warn('saveConfigById failed:', r.status); })
+      .catch(err => console.warn('saveConfigById error:', err.message));
+  }
+}
+
+// Busca a config dona de uma instância pelo token (usado no webhook, sem sessão)
+async function findConfigByToken(token) {
+  if (!token || !SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const q = encodeURIComponent(token);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?data->>instanceToken=eq.${q}&select=id,data`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    if (r.ok && Array.isArray(rows) && rows[0]?.data) {
+      return { id: rows[0].id, cfg: autoActivate({ ...DEFAULT_CFG(), ...rows[0].data }) };
+    }
+  } catch (err) { console.warn('findConfigByToken error:', err.message); }
+  return null;
+}
+
+// Cache por e-mail (curto) — evita hit no Supabase a cada request autenticado
+const _userConfigCache = new Map(); // email → { cfg, ts }
+async function getUserConfig(email) {
+  const cached = _userConfigCache.get(email);
+  if (cached && Date.now() - cached.ts < 5000) return cached.cfg;
+  const cfg = (await loadConfigById(configIdFor(email))) || DEFAULT_CFG();
+  cfg.owner = email;
+  _userConfigCache.set(email, { cfg, ts: Date.now() });
+  return cfg;
+}
+function putUserConfig(email, cfg) {
+  cfg.owner = email;
+  saveConfigById(configIdFor(email), cfg);
+  _userConfigCache.set(email, { cfg, ts: Date.now() });
+}
+
+// Compat: funções antigas continuam operando sobre a linha legada id=1
+async function loadAgentConfig() {
+  const legacy = await loadConfigById(1);
+  if (legacy) { console.log('✅ Config legado (id=1) carregado do Supabase'); return legacy; }
   if (process.env.AGENT_CONFIG_JSON) {
     try { return autoActivate({ ...DEFAULT_CFG(), ...JSON.parse(process.env.AGENT_CONFIG_JSON) }); } catch (_) {}
   }
-  // 3. Arquivo local (desenvolvimento)
   if (fs.existsSync(AGENT_FILE)) {
     try { return autoActivate({ ...DEFAULT_CFG(), ...JSON.parse(fs.readFileSync(AGENT_FILE, 'utf8')) }); } catch (_) {}
   }
   return DEFAULT_CFG();
 }
-
 function saveAgentConfig(cfg) {
-  // Supabase — fire-and-forget com retry
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?id=eq.1`, {
-      method: 'PATCH',
-      headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ data: cfg, updated_at: new Date().toISOString() }),
-    }).then(r => { if (!r.ok) console.warn('Supabase save failed:', r.status); })
-      .catch(err => console.warn('Supabase save error:', err.message));
-  }
-  // Arquivo local (backup / desenvolvimento)
+  saveConfigById(1, cfg);
   try { fs.writeFileSync(AGENT_FILE, JSON.stringify(cfg, null, 2)); } catch (_) {}
 }
 
@@ -414,6 +532,19 @@ const msgBuffer = new Map(); // phone → { texts: [], seq: 0 }
 
 // Status de qualificação por contato: potencial | desqualificado | agencia | ''
 const conversationStatus = new Map(); // phone → status
+
+// Chave de conversa escopada por dono (multiusuário).
+// Usuário primário mantém a chave "crua" (compatível com dados existentes);
+// os demais recebem prefixo "<id>:" para isolamento total.
+function convKey(cfg, phone) {
+  const tag = configIdFor((cfg && cfg.owner) || PRIMARY_EMAIL);
+  return tag === 1 ? phone : `${tag}:${phone}`;
+}
+// Prefixo usado para filtrar as conversas de um usuário na listagem
+function convPrefixFor(email) {
+  const tag = configIdFor(email);
+  return tag === 1 ? '' : `${tag}:`;
+}
 
 // Classificação determinística por palavras-chave (backup, não depende do modelo)
 function classifyByKeywords(text) {
@@ -466,8 +597,8 @@ const MAX_HISTORY = 30; // mensagens mantidas por contato
 
 // ── Google Calendar helpers ───────────────────────────────────
 
-async function getGoogleAccessToken() {
-  const { googleClientId: cid, googleClientSecret: csec, googleRefreshToken: rt } = agentConfig;
+async function getGoogleAccessToken(cfg = agentConfig) {
+  const { googleClientId: cid, googleClientSecret: csec, googleRefreshToken: rt } = cfg;
   if (!cid || !csec || !rt) return null;
   const body = `client_id=${encodeURIComponent(cid)}&client_secret=${encodeURIComponent(csec)}&refresh_token=${encodeURIComponent(rt)}&grant_type=refresh_token`;
   const r = await proxyFetch('https://oauth2.googleapis.com/token', {
@@ -670,14 +801,30 @@ function isAudioMessage(data) {
   return !!(m.audioMessage || m.pttMessage || m.documentMessage?.mimetype?.startsWith('audio'));
 }
 
-// Destino das indicações: grupo "Renov Gestão ✅" do WhatsApp.
-// Se o envio ao grupo falhar, cai para o número pessoal de reserva.
+// Destino padrão das indicações (usuário primário): grupo "Renov Gestão ✅".
 const CONTACT_FORWARD_GROUP  = '120363427333810759@g.us'; // Renov Gestão ✅
 const CONTACT_FORWARD_NUMBER = '5511970799985';           // reserva
 
+// Descobre para onde encaminhar as indicações deste usuário.
+// Cada usuário pode ter seu próprio grupo/número em cfg.forwardGroup / cfg.forwardNumber.
+// O usuário primário usa o grupo Renov por padrão.
+function forwardDestinations(cfg) {
+  const dests = [];
+  if (cfg?.forwardGroup) dests.push(cfg.forwardGroup);
+  if (cfg?.forwardNumber) dests.push(cfg.forwardNumber);
+  if (!dests.length && (cfg?.owner || '').toLowerCase() === PRIMARY_EMAIL) {
+    dests.push(CONTACT_FORWARD_GROUP, CONTACT_FORWARD_NUMBER);
+  }
+  // Fallback final: manda para o próprio dono da instância (não perde a indicação)
+  if (!dests.length && cfg?.instanceOwnerPhone) dests.push(cfg.instanceOwnerPhone);
+  return dests;
+}
+
 // Envia a indicação com até 3 tentativas por destino — a mensagem PRECISA chegar
-async function forwardIndication(sendToken, textMsg) {
-  for (const dest of [CONTACT_FORWARD_GROUP, CONTACT_FORWARD_NUMBER]) {
+async function forwardIndication(sendToken, cfg, textMsg) {
+  const dests = forwardDestinations(cfg);
+  if (!dests.length) { console.warn('[INDICACAO] sem destino configurado para', cfg?.owner); return false; }
+  for (const dest of dests) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const r = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
@@ -694,7 +841,7 @@ async function forwardIndication(sendToken, textMsg) {
       await new Promise(r => setTimeout(r, 1500));
     }
   }
-  console.error('[INDICACAO] FALHA DEFINITIVA — grupo e número reserva falharam');
+  console.error('[INDICACAO] FALHA DEFINITIVA — todos os destinos falharam');
   return false;
 }
 
@@ -804,8 +951,9 @@ app.get('/api/agent/webhook-log', requireAuth, (req, res) => {
   res.json({ ok: true, log: webhookLog.slice(-20) });
 });
 
-app.get('/api/agent/config', requireAuth, (req, res) => {
-  res.json({ ok: true, data: { ...agentConfig, docText: agentConfig.docText ? '(carregado)' : '' } });
+app.get('/api/agent/config', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  res.json({ ok: true, data: { ...cfg, docText: cfg.docText ? '(carregado)' : '' } });
 });
 
 // Lista modelos gratuitos do OpenRouter — sem testar um por um (evita timeout)
@@ -854,15 +1002,16 @@ app.post('/api/agent/chat', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/agent/config', requireAuth, (req, res) => {
+app.post('/api/agent/config', requireAuth, async (req, res) => {
   const { active, instanceName, instanceToken, prompt, docText, openrouterKey, model,
           schedulingEnabled, calendarId, googleClientId, googleClientSecret } = req.body;
+  const prev = await getUserConfig(req.session.email);
   // Ao salvar configurações completas, sempre reativa e limpa flag de desativação manual
   const hasRequiredFields = !!(instanceToken && openrouterKey);
-  agentConfig = {
+  const newCfg = {
     // Preserva token OAuth e email ao salvar — não apaga o login do Google
-    googleRefreshToken: agentConfig.googleRefreshToken || '',
-    googleEmail:        agentConfig.googleEmail || '',
+    googleRefreshToken: prev.googleRefreshToken || '',
+    googleEmail:        prev.googleEmail || '',
     active: hasRequiredFields ? true : !!active,
     manuallyDeactivated: false,
     instanceName: instanceName || '', instanceToken: instanceToken || '',
@@ -871,16 +1020,19 @@ app.post('/api/agent/config', requireAuth, (req, res) => {
     schedulingEnabled: !!schedulingEnabled,
     calendarId: calendarId || 'primary',
     googleClientId: googleClientId || '', googleClientSecret: googleClientSecret || '',
+    owner: req.session.email,
   };
-  saveAgentConfig(agentConfig);
-  logReq('POST', '/api/agent/config', `active=${agentConfig.active} scheduling=${agentConfig.schedulingEnabled}`);
+  putUserConfig(req.session.email, newCfg);
+  // E-mail primário também escreve na linha legada id=1 (mantém o agente atual)
+  if (configIdFor(req.session.email) === 1) { agentConfig = newCfg; }
+  logReq('POST', '/api/agent/config', `user=${req.session.email} active=${newCfg.active}`);
   res.json({ ok: true });
 });
 
 // ── Google OAuth login flow ───────────────────────────────────
 
-app.get('/api/agent/google-auth', requireAuth, (req, res) => {
-  const { googleClientId } = agentConfig;
+app.get('/api/agent/google-auth', requireAuth, async (req, res) => {
+  const { googleClientId } = await getUserConfig(req.session.email);
   if (!googleClientId) return res.status(400).send('<h2>Client ID não configurado.</h2><p>Salve as configurações do Agente IA com seu Client ID antes de fazer login.</p>');
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
   const redirectUri = `${proto}://${req.get('host')}/api/agent/google-callback`;
@@ -901,11 +1053,12 @@ app.get('/api/agent/google-callback', async (req, res) => {
     return res.redirect('/?google_error=' + encodeURIComponent(error || 'sem_codigo'));
   }
   try {
+    const cfg = await getUserConfig(req.session.email);
     const proto = req.headers['x-forwarded-proto'] || req.protocol;
     const redirectUri = `${proto}://${req.get('host')}/api/agent/google-callback`;
     const body = new URLSearchParams({
-      client_id: agentConfig.googleClientId,
-      client_secret: agentConfig.googleClientSecret,
+      client_id: cfg.googleClientId,
+      client_secret: cfg.googleClientSecret,
       code, redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }).toString();
@@ -928,9 +1081,10 @@ app.get('/api/agent/google-callback', async (req, res) => {
       const ud = await ur.json();
       email = ud.email || '';
     } catch (_) {}
-    agentConfig.googleRefreshToken = data.refresh_token;
-    agentConfig.googleEmail = email;
-    saveAgentConfig(agentConfig);
+    cfg.googleRefreshToken = data.refresh_token;
+    cfg.googleEmail = email;
+    putUserConfig(req.session.email, cfg);
+    if (configIdFor(req.session.email) === 1) agentConfig = cfg;
     logReq('GET', '/api/agent/google-callback', `email=${email}`);
     res.redirect('/?google_ok=' + encodeURIComponent(email));
   } catch (err) {
@@ -938,26 +1092,30 @@ app.get('/api/agent/google-callback', async (req, res) => {
   }
 });
 
-app.get('/api/agent/google-status', requireAuth, (req, res) => {
+app.get('/api/agent/google-status', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
   res.json({
     ok: true,
-    connected: !!(agentConfig.googleRefreshToken && agentConfig.googleEmail),
-    email: agentConfig.googleEmail || '',
+    connected: !!(cfg.googleRefreshToken && cfg.googleEmail),
+    email: cfg.googleEmail || '',
   });
 });
 
-app.post('/api/agent/google-disconnect', requireAuth, (req, res) => {
-  agentConfig.googleRefreshToken = '';
-  agentConfig.googleEmail = '';
-  saveAgentConfig(agentConfig);
+app.post('/api/agent/google-disconnect', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  cfg.googleRefreshToken = '';
+  cfg.googleEmail = '';
+  putUserConfig(req.session.email, cfg);
+  if (configIdFor(req.session.email) === 1) agentConfig = cfg;
   res.json({ ok: true });
 });
 
 app.post('/api/agent/test-calendar', requireAuth, async (req, res) => {
   try {
-    const token = await getGoogleAccessToken();
+    const cfg = await getUserConfig(req.session.email);
+    const token = await getGoogleAccessToken(cfg);
     if (!token) return res.status(400).json({ error: 'Credenciais Google não configuradas.' });
-    const busy = await getCalendarBusySlots(token, agentConfig.calendarId);
+    const busy = await getCalendarBusySlots(token, cfg.calendarId);
     const slots = findAvailableSlots(busy, 3);
     res.json({ ok: true, slots: slots.map(s => ({ utc: s.toISOString(), brt: formatSlotBRT(s) })) });
   } catch (err) {
@@ -965,13 +1123,15 @@ app.post('/api/agent/test-calendar', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/agent/toggle', requireAuth, (req, res) => {
-  agentConfig.active = !agentConfig.active;
+app.post('/api/agent/toggle', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  cfg.active = !cfg.active;
   // Persiste intenção do usuário — só respeita desativação manual
-  agentConfig.manuallyDeactivated = !agentConfig.active;
-  saveAgentConfig(agentConfig);
-  logReq('POST', '/api/agent/toggle', `active=${agentConfig.active}`);
-  res.json({ ok: true, active: agentConfig.active });
+  cfg.manuallyDeactivated = !cfg.active;
+  putUserConfig(req.session.email, cfg);
+  if (configIdFor(req.session.email) === 1) agentConfig = cfg;
+  logReq('POST', '/api/agent/toggle', `user=${req.session.email} active=${cfg.active}`);
+  res.json({ ok: true, active: cfg.active });
 });
 
 // Webhook público — Evolution Go posta aqui sem autenticação.
@@ -985,17 +1145,22 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (webhookLog.length > 30) webhookLog.shift();
     console.log(`[WEBHOOK] event="${rawEvent}" keys=${Object.keys(req.body || {}).join(',')}`);
 
-    // Token: prioriza o que a própria Evolution manda no webhook (sempre atual,
-    // mesmo quando o token rotaciona ao reparear o QR) — config é fallback
-    const sendToken = req.body?.instanceToken || agentConfig.instanceToken || '';
-    // Auto-cura: se o token do webhook difere do salvo, atualiza a config
-    if (req.body?.instanceToken && agentConfig.instanceToken && req.body.instanceToken !== agentConfig.instanceToken) {
-      agentConfig.instanceToken = req.body.instanceToken;
-      saveAgentConfig(agentConfig);
-      console.log('[WEBHOOK] token da instância rotacionou — config atualizada automaticamente');
+    // Token da instância que recebeu a mensagem
+    const sendToken = req.body?.instanceToken || '';
+    const instName  = req.body?.instanceName || '';
+
+    // MULTIUSUÁRIO: descobre de qual usuário é esta instância pelo token.
+    // Cada usuário tem sua própria config; a config legada (id=1) é o fallback.
+    let cfg = null;
+    if (sendToken) {
+      const owner = await findConfigByToken(sendToken);
+      if (owner) { cfg = owner.cfg; console.log(`[WEBHOOK] instância de ${cfg.owner || 'id='+owner.id}`); }
     }
-    if (!agentConfig.active || !sendToken) {
-      console.log(`[WEBHOOK] ignorado — active=${agentConfig.active} token=${!!sendToken}`);
+    if (!cfg) cfg = agentConfig; // fallback legado (mantém a instância giovani viva)
+
+    const effToken = sendToken || cfg.instanceToken || '';
+    if (!cfg.active || !effToken) {
+      console.log(`[WEBHOOK] ignorado — active=${cfg.active} token=${!!effToken}`);
       return;
     }
 
@@ -1034,13 +1199,16 @@ app.post('/api/agent/webhook', async (req, res) => {
     const from = remoteJid.replace(/@[\w.]+$/, '');
     if (!from) return;
 
+    // Chave escopada por dono — isola conversas entre usuários
+    const sk = convKey(cfg, from);
+
     // Carrega histórico persistido (Supabase) — mantém memória entre cold starts
-    await loadConversation(from);
+    await loadConversation(sk);
 
     // Verifica se IA está desativada para este número
-    if (disabledNumbers.has(from)) return;
+    if (disabledNumbers.has(sk)) return;
 
-    const key = agentConfig.openrouterKey;
+    const key = cfg.openrouterKey;
     if (!key) return;
 
     const ts = new Date().toTimeString().slice(0, 8);
@@ -1049,7 +1217,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     // Transcreve áudio se necessário
     if (!text && isAudioMessage(msgData)) {
       console.log(`[${ts}] 🎙 Áudio recebido de ${from} — transcrevendo...`);
-      const transcription = await transcribeAudio(msgData, key, sendToken, picked);
+      const transcription = await transcribeAudio(msgData, key, effToken, picked);
       if (transcription) {
         text = `[Áudio transcrito]: ${transcription}`;
         console.log(`[${ts}] 🎙 Transcrição: ${transcription.slice(0, 80)}`);
@@ -1057,19 +1225,19 @@ app.post('/api/agent/webhook', async (req, res) => {
         // Sem transcrição disponível — avisa o contato
         await proxyFetch(`${EVOLUTION_URL}/send/text`, {
           method: 'POST',
-          headers: { apikey: sendToken },
+          headers: { apikey: effToken },
           body: JSON.stringify({ number: from, text: 'Recebi seu áudio! Para agilizar, pode me mandar a mensagem por escrito? 😊', delay: 1500 }),
         });
         return;
       }
     }
 
-    // Contato compartilhado (vCard) — encaminha para o responsável e avisa o modelo
+    // Contato compartilhado (vCard) — encaminha para o grupo do dono
     const sharedContacts = extractContacts(msgData);
     if (sharedContacts.length) {
       const senderName = msgData.pushName || from;
       for (const c of sharedContacts) {
-        await forwardIndication(sendToken,
+        await forwardIndication(effToken, cfg,
           `📇 *Indicação recebida pelo agente*\n\n👤 Nome: ${c.name}\n📱 Telefone: ${c.phone}\n\n🔁 Indicado por: ${senderName} (${from})`);
       }
       const desc = sharedContacts.map(c => `${c.name} (${c.phone})`).join(', ');
@@ -1083,10 +1251,10 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     console.log(`[${ts}] 🤖 Agente recebeu de ${from}: ${text.slice(0, 80)}`);
 
-    // ── Buffer de mensagens: espera 15–30s para juntar mensagens seguidas
+    // ── Buffer de mensagens: espera 20s para juntar mensagens seguidas
     // do mesmo contato e responder tudo de uma vez ──
-    let buf = msgBuffer.get(from);
-    if (!buf) { buf = { texts: [], seq: 0 }; msgBuffer.set(from, buf); }
+    let buf = msgBuffer.get(sk);
+    if (!buf) { buf = { texts: [], seq: 0 }; msgBuffer.set(sk, buf); }
     buf.texts.push(text);
     buf.seq++;
     const mySeq = buf.seq;
@@ -1105,7 +1273,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     const typedPhones = extractPhonesFromText(combined);
     if (typedPhones.length) {
       const senderName2 = msgData.pushName || from;
-      const forwarded = await forwardIndication(sendToken,
+      const forwarded = await forwardIndication(effToken, cfg,
         `📇 *Indicação recebida pelo agente*\n\n📱 Telefone(s): ${typedPhones.join(', ')}\n💬 Mensagem original:\n"${combined.slice(0, 400)}"\n\n🔁 Indicado por: ${senderName2} (${from})`);
       if (forwarded) {
         combined += `\n[Enviei o contato de: ${typedPhones.join(', ')}]`;
@@ -1114,27 +1282,27 @@ app.post('/api/agent/webhook', async (req, res) => {
 
     // Classificação por palavras-chave ANTES do modelo — garante disparo mesmo
     // que o modelo gratuito falhe em responder
-    const prevStatusEarly = conversationStatus.get(from) || '';
+    const prevStatusEarly = conversationStatus.get(sk) || '';
     const kwEarly = classifyByKeywords(combined);
     if (kwEarly === 'potencial' && prevStatusEarly !== 'potencial' && prevStatusEarly !== 'agencia') {
-      conversationStatus.set(from, 'potencial');
+      conversationStatus.set(sk, 'potencial');
       const leadNome = msgData.pushName || from;
-      await forwardIndication(sendToken,
+      await forwardIndication(effToken, cfg,
         `🟢 *Lead qualificado pelo agente!*\n\n👤 Nome: ${leadNome}\n📱 WhatsApp: ${from}\n\n💬 Última mensagem:\n"${combined.slice(0, 300)}"\n\n✅ Demonstrou interesse — vale acompanhar.`);
-      console.log(`[${ts}] 🟢 ${from} qualificado (palavra-chave) — enviado ao grupo Renov Gestão`);
+      console.log(`[${ts}] 🟢 ${from} qualificado (palavra-chave) — encaminhado`);
     } else if (kwEarly === 'agencia' && prevStatusEarly !== 'agencia') {
-      conversationStatus.set(from, 'agencia');
+      conversationStatus.set(sk, 'agencia');
       console.log(`[${ts}] 🟠 ${from} tem agência (palavra-chave)`);
     }
 
     // Mantém histórico de conversa por contato
-    if (!conversationHistory.has(from)) conversationHistory.set(from, []);
-    const history = conversationHistory.get(from);
+    if (!conversationHistory.has(sk)) conversationHistory.set(sk, []);
+    const history = conversationHistory.get(sk);
     history.push({ role: 'user', content: combined });
     if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
 
     // Monta system prompt — injeta slots disponíveis se agendamento ativo
-    let sysBase = [agentConfig.prompt || '', agentConfig.docText ? `\n\n# Documento de referência:\n${agentConfig.docText}` : ''].join('').trim();
+    let sysBase = [cfg.prompt || '', cfg.docText ? `\n\n# Documento de referência:\n${cfg.docText}` : ''].join('').trim();
     const leadName = (msgData.pushName || '').trim();
     sysBase += '\n\nIMPORTANTE:\n'
       + (leadName ? `- O nome do contato no WhatsApp é "${leadName}". Chame-o pelo primeiro nome de forma natural. Se ele se apresentar com outro nome durante a conversa, passe a usar o nome que ele informou.\n` : '- Se o contato informar o nome dele, use-o nas respostas seguintes.\n')
@@ -1159,12 +1327,12 @@ app.post('/api/agent/webhook', async (req, res) => {
       + '- [STATUS:andamento] → ainda em qualificação\n'
       + 'O marcador será removido antes do envio — o cliente nunca o verá.';
 
-    if (agentConfig.schedulingEnabled) {
+    if (cfg.schedulingEnabled) {
       let slotsText = '';
       try {
-        const gToken = await getGoogleAccessToken();
+        const gToken = await getGoogleAccessToken(cfg);
         if (gToken) {
-          const busy  = await getCalendarBusySlots(gToken, agentConfig.calendarId);
+          const busy  = await getCalendarBusySlots(gToken, cfg.calendarId);
           const slots = findAvailableSlots(busy, 2);
           if (slots.length > 0) {
             slotsText = '\n\n# Horários disponíveis para reunião (horário de Brasília):\n'
@@ -1200,7 +1368,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     let reply = null;
     for (let round = 1; round <= 2 && !reply; round++) {
       try {
-        reply = await callOpenRouter(key, agentConfig.model, sysBase, history);
+        reply = await callOpenRouter(key, cfg.model, sysBase, history);
       } catch (err) {
         console.warn(`[MODELO] rodada ${round} falhou por completo: ${err.message}`);
         if (round < 2) await new Promise(r => setTimeout(r, 3000));
@@ -1217,7 +1385,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     }
 
     // Refina a classificação com o marcador do modelo (a heurística já rodou antes)
-    const statusBefore = conversationStatus.get(from) || '';
+    const statusBefore = conversationStatus.get(sk) || '';
     const modelTag = (reply.match(/\[STATUS:\s*(\w+)\s*\]/i)?.[1] || '').toLowerCase();
     let statusTag = statusBefore;
     if (modelTag === 'agencia') statusTag = 'agencia';
@@ -1225,20 +1393,20 @@ app.post('/api/agent/webhook', async (req, res) => {
     else if (modelTag === 'desqualificado' && !statusBefore) statusTag = 'desqualificado';
 
     if (statusTag && statusTag !== statusBefore) {
-      conversationStatus.set(from, statusTag);
+      conversationStatus.set(sk, statusTag);
       console.log(`[${ts}] 🏷 ${from} classificado como: ${statusTag} (modelo=${modelTag||'-'})`);
     }
     // Lead com agência/assessoria: para de responder automaticamente
     if (statusTag === 'agencia') {
-      disabledNumbers.add(from);
+      disabledNumbers.add(sk);
       console.log(`[${ts}] 🟠 ${from} tem agência — IA desativada para este contato`);
     }
     // Lead qualificado detectado só agora pelo modelo (heurística não pegou): encaminha
     if (statusTag === 'potencial' && statusBefore !== 'potencial') {
       const leadNome = msgData.pushName || from;
-      await forwardIndication(sendToken,
+      await forwardIndication(effToken, cfg,
         `🟢 *Lead qualificado pelo agente!*\n\n👤 Nome: ${leadNome}\n📱 WhatsApp: ${from}\n\n💬 Última mensagem:\n"${combined.slice(0, 300)}"\n\n✅ Demonstrou interesse — vale acompanhar.`);
-      console.log(`[${ts}] 🟢 ${from} qualificado (modelo) — enviado ao grupo Renov Gestão`);
+      console.log(`[${ts}] 🟢 ${from} qualificado (modelo) — encaminhado`);
     }
 
     // Detecta marcador de agendamento
@@ -1248,14 +1416,14 @@ app.post('/api/agent/webhook', async (req, res) => {
     // Adiciona resposta limpa ao histórico e persiste no Supabase
     history.push({ role: 'assistant', content: cleanReply });
     if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
-    saveConversation(from);
+    saveConversation(sk);
     let meetLink = null;
 
-    if (scheduleTag && agentConfig.schedulingEnabled) {
+    if (scheduleTag && cfg.schedulingEnabled) {
       try {
-        const gToken = await getGoogleAccessToken();
+        const gToken = await getGoogleAccessToken(cfg);
         if (gToken) {
-          meetLink = await createCalendarEvent(gToken, agentConfig.calendarId, scheduleTag, from);
+          meetLink = await createCalendarEvent(gToken, cfg.calendarId, scheduleTag, from);
           console.log(`[${ts}] 📅 Reunião criada para ${from}: ${meetLink}`);
         }
       } catch (calErr) {
@@ -1271,7 +1439,7 @@ app.post('/api/agent/webhook', async (req, res) => {
       try {
         const sendRes = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
           method: 'POST',
-          headers: { apikey: sendToken },
+          headers: { apikey: effToken },
           body: JSON.stringify({ number: from, text: cleanReply, delay: attempt === 1 ? typingMs : 1000 }),
         });
         if (sendRes.ok) { sent = true; break; }
@@ -1290,7 +1458,7 @@ app.post('/api/agent/webhook', async (req, res) => {
       const linkMsg = `📅 *Reunião confirmada!*\n\n🗓 ${slotBRT}\n🔗 Link para entrar:\n${meetLink}\n\nEsperamos você! 🚀`;
       await proxyFetch(`${EVOLUTION_URL}/send/text`, {
         method: 'POST',
-        headers: { apikey: sendToken },
+        headers: { apikey: effToken },
         body: JSON.stringify({ number: from, text: linkMsg, delay: 3000 }),
       });
     }
@@ -1304,70 +1472,64 @@ app.post('/api/agent/webhook', async (req, res) => {
   }
 });
 
-// Lista conversas ativas — lê do Supabase para sobreviver a cold starts
+// Lista conversas ativas do usuário logado — filtradas pelo prefixo do dono
 app.get('/api/agent/conversations', requireAuth, async (req, res) => {
+  const prefix = convPrefixFor(req.session.email); // '' para primário, '<id>:' p/ demais
+  const stripPrefix = (p) => prefix ? p.slice(prefix.length) : p;
   try {
     if (SUPABASE_URL && SUPABASE_KEY) {
-      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?select=phone,messages,disabled,status&order=updated_at.desc&limit=50`, { method: 'GET', headers: SB_HEADERS });
+      // Primário: chaves "cruas" (sem ":"); demais: chaves que começam com "<id>:"
+      const filter = prefix
+        ? `phone=like.${encodeURIComponent(prefix + '*')}`
+        : `phone=not.like.${encodeURIComponent('*:*')}`;
+      const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?select=phone,messages,disabled,status&${filter}&order=updated_at.desc&limit=50`, { method: 'GET', headers: SB_HEADERS });
       const rows = await r.json();
       if (r.ok && Array.isArray(rows)) {
         const list = rows.map(row => {
           const msgs = Array.isArray(row.messages) ? row.messages : [];
           return {
-            phone: row.phone,
+            phone: stripPrefix(row.phone),
             msgCount: msgs.length,
             lastMsg: msgs.filter(m => m.role === 'user').slice(-1)[0]?.content?.slice(0, 60) || '',
             disabled: !!row.disabled,
             status: row.status || '',
           };
         });
-        // Contatos com agência fixados no topo, depois potenciais
         const rank = { agencia: 0, potencial: 1, '': 2, andamento: 2, desqualificado: 3 };
         list.sort((a, b) => (rank[a.status] ?? 2) - (rank[b.status] ?? 2));
         return res.json({ ok: true, conversations: list });
       }
     }
   } catch (err) { console.warn('conversations list error:', err.message); }
-  // Fallback: memória local
-  const list = [];
-  conversationHistory.forEach((msgs, phone) => {
-    list.push({
-      phone,
-      msgCount: msgs.length,
-      lastMsg: msgs.filter(m => m.role === 'user').slice(-1)[0]?.content?.slice(0, 60) || '',
-      disabled: disabledNumbers.has(phone),
-      status: conversationStatus.get(phone) || '',
-    });
-  });
-  list.sort((a, b) => b.msgCount - a.msgCount);
-  res.json({ ok: true, conversations: list });
+  res.json({ ok: true, conversations: [] });
 });
 
-// Ativa/desativa IA para um número específico — persiste no Supabase
+// Ativa/desativa IA para um número específico — escopado por usuário
 app.post('/api/agent/conversation-toggle', requireAuth, async (req, res) => {
   const { phone, disabled } = req.body;
   if (!phone) return res.status(400).json({ error: 'phone obrigatório' });
-  if (disabled) disabledNumbers.add(phone); else disabledNumbers.delete(phone);
+  const sk = convPrefixFor(req.session.email) + phone;
+  if (disabled) disabledNumbers.add(sk); else disabledNumbers.delete(sk);
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
       await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations`, {
         method: 'POST',
         headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ phone, disabled: !!disabled, updated_at: new Date().toISOString() }),
+        body: JSON.stringify({ phone: sk, disabled: !!disabled, updated_at: new Date().toISOString() }),
       });
     } catch (err) { console.warn('toggle persist error:', err.message); }
   }
-  res.json({ ok: true, phone, disabled: disabledNumbers.has(phone) });
+  res.json({ ok: true, phone, disabled: disabledNumbers.has(sk) });
 });
 
-// Apaga histórico de conversa de um número — também no Supabase
+// Apaga histórico de conversa de um número — escopado por usuário
 app.delete('/api/agent/conversation/:phone', requireAuth, async (req, res) => {
-  const phone = req.params.phone;
-  conversationHistory.delete(phone);
-  disabledNumbers.delete(phone);
+  const sk = convPrefixFor(req.session.email) + req.params.phone;
+  conversationHistory.delete(sk);
+  disabledNumbers.delete(sk);
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
-      await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?phone=eq.${phone}`, { method: 'DELETE', headers: SB_HEADERS });
+      await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?phone=eq.${encodeURIComponent(sk)}`, { method: 'DELETE', headers: SB_HEADERS });
     } catch (err) { console.warn('conversation delete error:', err.message); }
   }
   res.json({ ok: true });

@@ -718,11 +718,25 @@
       <p>Disparos em massa com inteligência</p>
     </div>
     <div class="header-actions">
+      <span id="user-badge" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--text-2);margin-right:4px">
+        <img id="user-pic" src="" alt="" style="width:26px;height:26px;border-radius:50%;display:none;border:1px solid var(--border)" />
+        <span id="user-name"></span>
+      </span>
       <form action="/logout" method="POST" style="display:inline">
         <button type="submit" class="btn-logout">Sair</button>
       </form>
     </div>
   </header>
+  <script>
+    // Mostra a conta Google logada no cabeçalho
+    fetch('/api/me').then(r => r.json()).then(j => {
+      if (!j.ok) return;
+      const badge = document.getElementById('user-badge');
+      document.getElementById('user-name').textContent = j.name || j.email;
+      if (j.picture) { const p = document.getElementById('user-pic'); p.src = j.picture; p.style.display = 'block'; }
+      badge.style.display = 'flex';
+    }).catch(() => {});
+  </script>
 
   <div id="banner-container"></div>
 
