@@ -312,10 +312,11 @@ app.post('/api/instance/create', requireAuth, async (req, res) => {
       body: JSON.stringify({ webhookUrl: appWebhookUrl(req), subscribe: ['MESSAGE'] }),
     });
 
-    // 3. Registra a posse na config do usuário
+    // 3. Registra a posse na config do usuário (guarda o id para exclusão futura)
+    const instId = crBody?.data?.id || '';
     const cfg = await getUserConfig(email);
     cfg.ownedInstances = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
-    cfg.ownedInstances.push({ name, token, createdAt: new Date().toISOString() });
+    cfg.ownedInstances.push({ name, token, id: instId, createdAt: new Date().toISOString() });
     putUserConfig(email, cfg);
 
     res.json({ ok: true, name, token });
@@ -332,11 +333,20 @@ app.delete('/api/instance/:name', requireAuth, async (req, res) => {
   if (!mine) return res.status(403).json({ error: 'Esta instância não pertence à sua conta.' });
   logReq('DELETE', '/api/instance/' + name, email);
   try {
+    // O Evolution Go exclui por ID (UUID), não pelo nome. Usa o id salvo,
+    // ou busca em /instance/all pelo nome se for instância antiga.
+    let instId = mine.id || '';
+    if (!instId) {
+      const allRes = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
+      const all = await allRes.json().catch(() => []);
+      const rows = Array.isArray(all) ? all : (all.data || []);
+      instId = (rows.find(r => r.name === name) || {}).id || '';
+    }
     // Encerra a sessão (se houver) e remove a instância no Evolution
     await proxyFetch(`${EVOLUTION_URL}/instance/logout`, { method: 'DELETE', headers: { apikey: mine.token } }).catch(() => {});
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/delete/${encodeURIComponent(name)}`, {
-      method: 'DELETE', headers: { apikey: GLOBAL_API_KEY },
-    });
+    const up = instId
+      ? await proxyFetch(`${EVOLUTION_URL}/instance/delete/${encodeURIComponent(instId)}`, { method: 'DELETE', headers: { apikey: GLOBAL_API_KEY } })
+      : { ok: false, status: 404, json: async () => ({ error: 'instância não encontrada no servidor' }) };
     const body = await up.json().catch(() => ({}));
     // Remove da posse do usuário mesmo se o Evolution falhar (não deixa lixo na conta)
     cfg.ownedInstances = owned.filter(o => o.name !== name);
