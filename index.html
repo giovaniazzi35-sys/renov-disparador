@@ -827,6 +827,17 @@
           <button class="btn-ghost btn-sm" id="btn-check-conn">✓ Verificar conexão</button>
           <button class="btn-ghost btn-sm" id="btn-disconnect-inst">⏏ Desconectar</button>
         </div>
+
+        <!-- Minhas instâncias (gerenciar / excluir) -->
+        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+          <div class="row-between" style="margin-bottom:8px">
+            <span style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em">Minhas instâncias</span>
+            <button class="btn-ghost btn-sm" id="btn-refresh-inst-list" style="padding:3px 10px;font-size:11px">↺</button>
+          </div>
+          <div id="instance-manager-list" style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:12px;color:var(--text-3)">Carregando...</div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -1630,11 +1641,75 @@ const Instances = {
       opt.value = j.name; opt.textContent = j.name + ' ⚠'; sel.appendChild(opt);
       sel.value = j.name;
       UI.addBanner('info', `✓ Instância "${j.name}" criada! Escaneie o QR para conectar.`);
+      this.renderManagerList();
       await this.showQR();
     } catch (err) {
       UI.addBanner('error', `Erro ao criar instância: ${err.message}`);
     } finally {
       btn.disabled = false; btn.textContent = '➕ Criar nova instância';
+    }
+  },
+
+  // Renderiza a lista de instâncias do usuário com ações (conectar / excluir)
+  async renderManagerList() {
+    const box = document.getElementById('instance-manager-list');
+    if (!box) return;
+    try {
+      const instances = await API.getAllInstances();
+      if (!instances.length) {
+        box.innerHTML = '<div style="font-size:12px;color:var(--text-3)">Nenhuma instância ainda. Clique em “Criar nova instância”.</div>';
+        return;
+      }
+      box.innerHTML = '';
+      instances.forEach(inst => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px';
+        const dotColor = inst.connected ? '#4ade80' : '#f87171';
+        row.innerHTML = `
+          <span style="color:${dotColor};font-size:10px">●</span>
+          <span style="flex:1;font-size:13px;font-weight:600">${esc(inst.name)}</span>
+          <span style="font-size:11px;color:var(--text-3)">${inst.connected ? 'conectada' : 'desconectada'}</span>
+          <button class="btn-ghost btn-sm" data-use="${esc(inst.name)}" style="padding:3px 10px;font-size:11px">usar</button>
+          <button class="btn-ghost btn-sm" data-qr="${esc(inst.name)}" style="padding:3px 10px;font-size:11px">📷 QR</button>
+          <button class="btn-ghost btn-sm" data-del-inst="${esc(inst.name)}" style="padding:3px 8px;font-size:11px;color:#f87171">🗑</button>`;
+        box.appendChild(row);
+      });
+
+      box.querySelectorAll('[data-use]').forEach(b => b.onclick = () => {
+        const n = b.dataset.use;
+        document.getElementById('instance-select').value = n;
+        document.getElementById('instance-token').value = localStorage.getItem('token:' + n) || '';
+        this.checkStatus(true);
+        UI.addBanner('info', `Instância “${n}” selecionada.`);
+      });
+      box.querySelectorAll('[data-qr]').forEach(b => b.onclick = async () => {
+        const n = b.dataset.qr;
+        document.getElementById('instance-select').value = n;
+        document.getElementById('instance-token').value = localStorage.getItem('token:' + n) || '';
+        await this.showQR();
+      });
+      box.querySelectorAll('[data-del-inst]').forEach(b => b.onclick = () => this.deleteInstance(b.dataset.delInst));
+    } catch (err) {
+      box.innerHTML = `<div style="font-size:12px;color:#f87171">Erro ao listar: ${esc(err.message)}</div>`;
+    }
+  },
+
+  async deleteInstance(name) {
+    if (!confirm(`Excluir a instância “${name}”?\n\nIsso desconecta o WhatsApp e remove a instância da sua conta.`)) return;
+    try {
+      const res = await fetch(`/api/instance/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      localStorage.removeItem('token:' + name);
+      if (document.getElementById('instance-select').value === name) {
+        document.getElementById('instance-select').value = '';
+        document.getElementById('instance-token').value = '';
+      }
+      UI.addBanner('info', j.warning ? `Instância removida da sua conta (aviso: ${j.warning})` : `✓ Instância “${name}” excluída.`);
+      await this.load();
+      await this.renderManagerList();
+    } catch (err) {
+      UI.addBanner('error', `Erro ao excluir: ${err.message}`);
     }
   },
 
@@ -1734,17 +1809,12 @@ const Instances = {
     if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
     await API.connectInstance(token, window.location.protocol + '//' + window.location.host + '/api/agent/webhook');
 
-    // A Evolution Go às vezes demora alguns segundos para o QR ficar pronto
-    // (ou está temporariamente limitando pareamentos) — tenta algumas vezes.
-    let code = null, lastErr = '';
-    for (let i = 0; i < 6 && !code; i++) {
-      if (i > 0) await new Promise(r => setTimeout(r, 2500));
-      const data = await API.getQR(token);
-      code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
-      lastErr = data?.data?.error || data?.error || '';
-    }
+    // O backend já tenta várias vezes (o QR leva alguns segundos para ficar pronto)
+    UI.addBanner('info', '⏳ Gerando QR Code...');
+    const data = await API.getQR(token);
+    const code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
     if (!code) {
-      UI.addBanner('error', `Não foi possível gerar o QR Code${lastErr ? ': ' + lastErr : ''}. O WhatsApp pode estar limitando novos pareamentos temporariamente — aguarde alguns minutos e tente novamente.`);
+      UI.addBanner('error', data?.error || 'Não foi possível gerar o QR Code. Tente novamente em instantes.');
       return;
     }
 
@@ -2425,6 +2495,9 @@ function init() {
   _wire('btn-create-instance', () => Instances.createInstance());
   _wire('btn-check-conn', () => Instances.checkStatus(false));
   _wire('btn-disconnect-inst', () => Instances.logout());
+  _wire('btn-refresh-inst-list', () => Instances.renderManagerList());
+  // Carrega a lista de instâncias do usuário ao abrir o app
+  Instances.renderManagerList();
 
   // Modal
   document.getElementById('btn-modal-close').onclick = () => {

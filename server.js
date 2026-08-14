@@ -322,6 +322,31 @@ app.post('/api/instance/create', requireAuth, async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
+// Exclui uma instância — só se pertencer ao usuário logado
+app.delete('/api/instance/:name', requireAuth, async (req, res) => {
+  const email = req.session.email;
+  const name = req.params.name;
+  const cfg = await getUserConfig(email);
+  const owned = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
+  const mine = owned.find(o => o.name === name) || (cfg.instanceName === name ? { name, token: cfg.instanceToken } : null);
+  if (!mine) return res.status(403).json({ error: 'Esta instância não pertence à sua conta.' });
+  logReq('DELETE', '/api/instance/' + name, email);
+  try {
+    // Encerra a sessão (se houver) e remove a instância no Evolution
+    await proxyFetch(`${EVOLUTION_URL}/instance/logout`, { method: 'DELETE', headers: { apikey: mine.token } }).catch(() => {});
+    const up = await proxyFetch(`${EVOLUTION_URL}/instance/delete/${encodeURIComponent(name)}`, {
+      method: 'DELETE', headers: { apikey: GLOBAL_API_KEY },
+    });
+    const body = await up.json().catch(() => ({}));
+    // Remove da posse do usuário mesmo se o Evolution falhar (não deixa lixo na conta)
+    cfg.ownedInstances = owned.filter(o => o.name !== name);
+    if (cfg.instanceName === name) { cfg.instanceName = ''; cfg.instanceToken = ''; }
+    putUserConfig(email, cfg);
+    if (!up.ok) return res.status(200).json({ ok: true, warning: translateEvolutionError(up.status, body) });
+    res.json({ ok: true });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 // Verifica se o token pertence ao usuário logado (segurança das rotas por token)
 async function userOwnsToken(email, token) {
   if (!token) return false;
@@ -347,8 +372,25 @@ app.get('/api/instance/qr', requireAuth, async (req, res) => {
   const token = req.headers['x-instance-token'];
   if (!token) return res.status(400).json({ error: 'x-instance-token obrigatório.' });
   try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/qr`, { method: 'GET', headers: { apikey: token } });
-    res.status(up.status).json(await up.json());
+    // O QR leva alguns segundos para ficar pronto após o connect — tenta várias
+    // vezes aqui no servidor (mais confiável que depender do navegador).
+    let last = null;
+    for (let i = 0; i < 8; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 2000));
+      const up = await proxyFetch(`${EVOLUTION_URL}/instance/qr`, { method: 'GET', headers: { apikey: token } });
+      const body = await up.json().catch(() => ({}));
+      const qr = body?.data?.qrcode || body?.data?.code;
+      if (up.ok && qr) return res.json(body);
+      last = { status: up.status, body };
+      // Reforça o connect no meio do caminho — às vezes a sessão não iniciou
+      if (i === 2) {
+        await proxyFetch(`${EVOLUTION_URL}/instance/connect`, {
+          method: 'POST', headers: { apikey: token }, body: JSON.stringify({ subscribe: ['MESSAGE'] }),
+        }).catch(() => {});
+      }
+    }
+    const msg = last?.body?.error || last?.body?.message || 'QR não disponível';
+    res.status(503).json({ error: `${msg}. O servidor Evolution pode estar instável — tente novamente em instantes.` });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
