@@ -808,29 +808,17 @@
         <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
       </div>
 
-      <!-- Conexão / criação de instância -->
+      <!-- Status da conexão (a conexão/QR é feita direto no painel da Evolution) -->
       <div class="conn-card">
-        <div class="row-between" style="margin-bottom:12px">
-          <div class="card-title" style="margin:0;font-size:14px">Conectar WhatsApp</div>
+        <div class="row-between">
+          <div>
+            <div class="card-title" style="margin:0;font-size:14px">Status da conexão</div>
+            <div class="card-sub" style="margin:4px 0 0">Conecte e leia o QR direto no painel da Evolution. Aqui é só selecionar a instância e verificar.</div>
+          </div>
           <span class="conn-badge disconnected" id="conn-badge">● —</span>
         </div>
-        <div class="card-sub" style="margin-bottom:12px">Não tem instância? Crie uma nova e conecte lendo o QR code — o token é gerado e salvo automaticamente. Cada instância fica reservada à sua conta.</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <button class="btn-primary btn-sm" id="btn-create-instance">➕ Criar nova instância</button>
-          <button class="btn-ghost btn-sm" id="btn-show-qr">📷 Gerar QR (token atual)</button>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
           <button class="btn-ghost btn-sm" id="btn-check-conn">✓ Verificar conexão</button>
-          <button class="btn-ghost btn-sm" id="btn-disconnect-inst">⏏ Desconectar</button>
-        </div>
-
-        <!-- Minhas instâncias (gerenciar / excluir) -->
-        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
-          <div class="row-between" style="margin-bottom:8px">
-            <span style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em">Minhas instâncias</span>
-            <button class="btn-ghost btn-sm" id="btn-refresh-inst-list" style="padding:3px 10px;font-size:11px">↺</button>
-          </div>
-          <div id="instance-manager-list" style="display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:12px;color:var(--text-3)">Carregando...</div>
-          </div>
         </div>
       </div>
 
@@ -2500,13 +2488,8 @@ function init() {
   _wire('btn-request-pair', () => Instances.requestPairCode());
   _wire('btn-disconnect', () => Instances.logout());
   _wire('btn-restart-inst', () => Instances.restart());
-  // Novos botões de conexão do Step 1
-  _wire('btn-create-instance', () => Instances.createInstance());
+  // Botão de verificar conexão do Step 1
   _wire('btn-check-conn', () => Instances.checkStatus(false));
-  _wire('btn-disconnect-inst', () => Instances.logout());
-  _wire('btn-refresh-inst-list', () => Instances.renderManagerList());
-  // Carrega a lista de instâncias do usuário ao abrir o app
-  Instances.renderManagerList();
 
   // Modal
   document.getElementById('btn-modal-close').onclick = () => {

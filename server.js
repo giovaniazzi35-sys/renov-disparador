@@ -263,30 +263,20 @@ function appWebhookUrl(req) {
   return `${proto}://${req.get('host')}/api/agent/webhook`;
 }
 
-// Lista APENAS as instâncias do usuário logado (isolamento total entre contas)
+// Lista as instâncias do servidor Evolution (fluxo simples: usuário carrega,
+// seleciona a sua e usa o token — a conexão/QR é feita direto no painel da Evolution).
 app.get('/api/instances', requireAuth, async (req, res) => {
   logReq('GET', '/api/instances', req.session.email);
   try {
-    const cfg = await getUserConfig(req.session.email);
-    let owned = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
-    // Migra a instância legada do usuário (ex.: giovani) para o modelo de posse
-    if (cfg.instanceName && cfg.instanceToken && !owned.some(o => o.name === cfg.instanceName)) {
-      owned = [...owned, { name: cfg.instanceName, token: cfg.instanceToken }];
-      cfg.ownedInstances = owned; putUserConfig(req.session.email, cfg);
-    }
-    if (!owned.length) return res.json([]);
-
-    // Status AUTORITATIVO: /instance/status (Connected/LoggedIn) por instância.
-    // O /instance/all traz um campo "connected" que fica desatualizado e causa
-    // o efeito de "piscar" entre conectado/desconectado.
-    const list = await Promise.all(owned.map(async (o) => {
-      let connected = false;
-      try {
-        const st = await proxyFetch(`${EVOLUTION_URL}/instance/status`, { method: 'GET', headers: { apikey: o.token } });
-        const d = (await st.json().catch(() => ({})))?.data || {};
-        connected = !!(d.Connected || d.LoggedIn || d.connected || d.loggedIn);
-      } catch (_) {}
-      return { name: o.name, token: o.token, id: o.id || '', connected };
+    const up = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
+    const all = await up.json().catch(() => []);
+    const rows = Array.isArray(all) ? all : (all.data || []);
+    const list = rows.map(r => ({
+      name: r.name || r.instanceName || r.id || '',
+      token: r.token || '',
+      id: r.id || '',
+      connected: !!r.connected,
+      jid: r.jid || '',
     }));
     res.json(list);
   } catch (err) { res.status(502).json({ error: err.message }); }
