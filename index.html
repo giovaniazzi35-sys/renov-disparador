@@ -1763,17 +1763,28 @@ const Instances = {
     const token = this.getToken();
     if (!token) { if (!silent) UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
     const badge = document.getElementById('conn-badge');
-    badge.className = 'conn-badge checking'; badge.textContent = '● Verificando...';
+    // Só mostra "Verificando..." em checagem manual — nas automáticas evita o "piscar"
+    if (!silent) { badge.className = 'conn-badge checking'; badge.textContent = '● Verificando...'; }
     try {
       const data = await API.getStatus(token);
       const d = data?.data || data?.instance || data || {};
-      const connected = d.connected || d.loggedIn
+      let connected = d.connected || d.loggedIn
                      || d.Connected || d.LoggedIn
                      || d.connectionStatus === 'open'
                      || d.state === 'open'
                      || d.status === 'Connected'
                      || d.status === 'CONNECTED'
                      || false;
+      // Histerese: se estava conectado e leu desconectado uma única vez numa
+      // checagem automática, ignora (blip de reconexão) — só cai após 2 leituras
+      if (silent && !connected && AppState.lastConnected) {
+        AppState._discBlips = (AppState._discBlips || 0) + 1;
+        if (AppState._discBlips < 2) connected = true; // mantém conectado por ora
+        else AppState._discBlips = 0;
+      } else if (connected) {
+        AppState._discBlips = 0;
+      }
+      AppState.lastConnected = connected;
       const phone = this._extractPhone(data);
       this.updateConnCard(connected, phone);
       if (!silent) {
@@ -1782,26 +1793,28 @@ const Instances = {
       }
       return connected;
     } catch (err) {
-      badge.className = 'conn-badge disconnected'; badge.textContent = '● Erro';
-      if (!silent) UI.addBanner('error', `Erro ao verificar: ${err.message}`);
-      return false;
+      if (!silent) { badge.className = 'conn-badge disconnected'; badge.textContent = '● Erro'; UI.addBanner('error', `Erro ao verificar: ${err.message}`); }
+      return AppState.lastConnected || false;
     }
   },
 
   _startConnPoll() {
-    // Verifica conexão a cada 4s enquanto o modal estiver aberto
+    // Verifica conexão a cada 3s enquanto o modal estiver aberto.
+    // Mantém o QR na tela por no mínimo 10s antes de fechar automaticamente.
     clearInterval(AppState.connPollTimer);
     AppState.connPollTimer = setInterval(async () => {
       const modal = document.getElementById('modal-connect');
       if (modal.classList.contains('hidden')) { clearInterval(AppState.connPollTimer); return; }
       const connected = await this.checkStatus(true);
-      if (connected) {
+      const shownFor = Date.now() - (AppState.qrShownAt || 0);
+      if (connected && shownFor >= 10000) {
         clearInterval(AppState.connPollTimer);
         clearInterval(AppState.qrTimer);
         modal.classList.add('hidden');
         UI.addBanner('info', '✅ WhatsApp conectado com sucesso!');
+        this.load(); this.renderManagerList();
       }
-    }, 4000);
+    }, 3000);
   },
 
   async showQR() {
@@ -1819,11 +1832,13 @@ const Instances = {
     }
 
     document.getElementById('qr-img').src = code;
+    AppState.qrShownAt = Date.now(); // marca quando o QR apareceu (mín. 10s na tela)
     document.getElementById('modal-qr-section').classList.remove('hidden');
     document.getElementById('modal-pair-section').classList.add('hidden');
     document.getElementById('modal-title').textContent = 'Conectar via QR Code';
     document.getElementById('modal-sub').textContent = 'Abra o WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie o QR';
     document.getElementById('modal-connect').classList.remove('hidden');
+    UI.addBanner('info', '📷 QR Code na tela — escaneie com o WhatsApp.');
 
     clearInterval(AppState.qrTimer);
     AppState.qrCountdown = 60;

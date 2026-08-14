@@ -276,15 +276,18 @@ app.get('/api/instances', requireAuth, async (req, res) => {
     }
     if (!owned.length) return res.json([]);
 
-    // Busca status ao vivo no Evolution e devolve só as do usuário
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
-    const all = await up.json().catch(() => []);
-    const rows = Array.isArray(all) ? all : (all.data || []);
-    const byName = new Map(rows.map(r => [r.name, r]));
-    const list = owned.map(o => {
-      const live = byName.get(o.name) || {};
-      return { name: o.name, token: o.token, connected: !!live.connected, jid: live.jid || '' };
-    });
+    // Status AUTORITATIVO: /instance/status (Connected/LoggedIn) por instância.
+    // O /instance/all traz um campo "connected" que fica desatualizado e causa
+    // o efeito de "piscar" entre conectado/desconectado.
+    const list = await Promise.all(owned.map(async (o) => {
+      let connected = false;
+      try {
+        const st = await proxyFetch(`${EVOLUTION_URL}/instance/status`, { method: 'GET', headers: { apikey: o.token } });
+        const d = (await st.json().catch(() => ({})))?.data || {};
+        connected = !!(d.Connected || d.LoggedIn || d.connected || d.loggedIn);
+      } catch (_) {}
+      return { name: o.name, token: o.token, id: o.id || '', connected };
+    }));
     res.json(list);
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
