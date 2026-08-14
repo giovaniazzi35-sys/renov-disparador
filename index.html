@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Renov Disparador</title>
+  <title>DOIT SEND</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -687,34 +687,28 @@
 
   <!-- HEADER -->
   <header class="app-header">
-    <!-- Logo Renov (SVG fiel ao estilo listrado) -->
+    <!-- Logo DOIT SEND -->
     <div class="header-logo">
       <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <pattern id="stripes" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(0)">
-            <line x1="0" y1="0" x2="0" y2="4" stroke="#1a1a1a" stroke-width="1.8"/>
-          </pattern>
-          <clipPath id="r-clip">
-            <text x="4" y="46" font-family="Arial Black, sans-serif" font-weight="900" font-size="44" letter-spacing="-2">R</text>
-          </clipPath>
-          <clipPath id="e-clip">
-            <text x="4" y="46" font-family="Arial Black, sans-serif" font-weight="900" font-size="44" letter-spacing="-2">E</text>
-          </clipPath>
-          <clipPath id="renov-clip">
-            <text x="2" y="46" font-family="Arial Black, sans-serif" font-weight="900" font-size="36" letter-spacing="-1">RENOV</text>
-          </clipPath>
+          <linearGradient id="ds-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#3b82f6"/>
+            <stop offset="1" stop-color="#1e3a8a"/>
+          </linearGradient>
         </defs>
-        <!-- Fundo branco já é o container -->
-        <!-- Texto base RENOV -->
-        <text x="2" y="46" font-family="Arial Black, sans-serif" font-weight="900" font-size="36" letter-spacing="-1" fill="#1a1a1a">RENOV</text>
-        <!-- Listras sobre o texto -->
-        <rect x="0" y="0" width="80" height="55" fill="url(#stripes)" clip-path="url(#renov-clip)" opacity="0.55"/>
-        <!-- Subtítulo -->
-        <text x="2" y="66" font-family="Arial, sans-serif" font-weight="400" font-size="8" fill="#555" letter-spacing="0.3">Gestão e Digital</text>
+        <!-- Linhas de velocidade -->
+        <circle cx="10" cy="40" r="3" fill="url(#ds-grad)"/>
+        <rect x="6" y="30" width="16" height="4.5" rx="2.25" fill="url(#ds-grad)"/>
+        <rect x="6" y="45.5" width="16" height="4.5" rx="2.25" fill="url(#ds-grad)"/>
+        <!-- "D" -->
+        <path d="M30 16 h14 a24 24 0 0 1 0 48 h-14 a3 3 0 0 1 -3 -3 V19 a3 3 0 0 1 3 -3 z
+                 M37 26 V54 h7 a14 14 0 0 0 0 -28 z" fill="url(#ds-grad)" fill-rule="evenodd"/>
+        <!-- Seta -->
+        <path d="M20 40 h22 l-8 -8 h9 l11 8 -11 8 h-9 l8 -8 z" fill="url(#ds-grad)"/>
       </svg>
     </div>
     <div class="header-text">
-      <h1>Renov Disparador</h1>
+      <h1>DOIT SEND</h1>
       <p>Disparos em massa com inteligência</p>
     </div>
     <div class="header-actions">
