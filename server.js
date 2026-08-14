@@ -309,13 +309,10 @@ app.post('/api/instance/create', requireAuth, async (req, res) => {
     const crBody = await cr.json().catch(() => ({}));
     if (!cr.ok) return res.status(cr.status).json({ error: translateEvolutionError(cr.status, crBody) });
 
-    // 2. Conecta e registra o webhook do agente
-    await proxyFetch(`${EVOLUTION_URL}/instance/connect`, {
-      method: 'POST', headers: { apikey: token },
-      body: JSON.stringify({ webhookUrl: appWebhookUrl(req), subscribe: ['MESSAGE'] }),
-    });
+    // Não conecta aqui — a conexão acontece uma única vez ao gerar o QR
+    // (evita abrir clientes WhatsApp duplicados e saturar o Evolution Go).
 
-    // 3. Registra a posse na config do usuário (guarda o id para exclusão futura)
+    // Registra a posse na config do usuário (guarda o id para exclusão futura)
     const instId = crBody?.data?.id || '';
     const cfg = await getUserConfig(email);
     cfg.ownedInstances = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
@@ -395,12 +392,8 @@ app.get('/api/instance/qr', requireAuth, async (req, res) => {
       const qr = body?.data?.qrcode || body?.data?.code;
       if (up.ok && qr) return res.json(body);
       last = { status: up.status, body };
-      // Reforça o connect no meio do caminho — às vezes a sessão não iniciou
-      if (i === 2) {
-        await proxyFetch(`${EVOLUTION_URL}/instance/connect`, {
-          method: 'POST', headers: { apikey: token }, body: JSON.stringify({ subscribe: ['MESSAGE'] }),
-        }).catch(() => {});
-      }
+      // Não reconecta no meio — cada connect abre um cliente WhatsApp novo no
+      // servidor e satura o Evolution Go. Apenas aguarda o QR da sessão atual.
     }
     const msg = last?.body?.error || last?.body?.message || 'QR não disponível';
     res.status(503).json({ error: `${msg}. O servidor Evolution pode estar instável — tente novamente em instantes.` });
