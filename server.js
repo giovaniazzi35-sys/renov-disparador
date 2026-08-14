@@ -301,6 +301,31 @@ app.post('/api/instance/create', requireAuth, async (req, res) => {
   const token = require('crypto').randomUUID();
   logReq('POST', '/api/instance/create', `${email} -> ${name}`);
   try {
+    // 0. Auto-limpeza: remove instâncias do usuário que nunca conectaram (sem jid)
+    // para não acumular sessões mortas que saturam o Evolution Go.
+    const preCfg = await getUserConfig(email);
+    const preOwned = Array.isArray(preCfg.ownedInstances) ? preCfg.ownedInstances : [];
+    if (preOwned.length) {
+      try {
+        const allR = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
+        const allD = await allR.json().catch(() => []);
+        const allRows = Array.isArray(allD) ? allD : (allD.data || []);
+        const byName = new Map(allRows.map(r => [r.name, r]));
+        const keep = [];
+        for (const inst of preOwned) {
+          const live = byName.get(inst.name);
+          const neverPaired = live && !live.connected && !live.jid;
+          if (neverPaired && live.id) {
+            await proxyFetch(`${EVOLUTION_URL}/instance/delete/${encodeURIComponent(live.id)}`, { method: 'DELETE', headers: { apikey: GLOBAL_API_KEY } }).catch(() => {});
+            console.log(`[CREATE] auto-removida instância morta ${inst.name}`);
+          } else {
+            keep.push(inst);
+          }
+        }
+        if (keep.length !== preOwned.length) { preCfg.ownedInstances = keep; putUserConfig(email, preCfg); }
+      } catch (_) {}
+    }
+
     // 1. Cria a instância no Evolution (token definido por nós)
     const cr = await proxyFetch(`${EVOLUTION_URL}/instance/create`, {
       method: 'POST', headers: { apikey: GLOBAL_API_KEY },
