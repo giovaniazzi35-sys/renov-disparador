@@ -672,9 +672,31 @@
     /* ══ CRM ══ */
     #panel-crm { padding-top: 4px; }
     .crm-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
-    .crm-stat { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px 18px; }
-    .crm-stat-val { font-size:24px; font-weight:800; color:var(--text); letter-spacing:-.5px; }
-    .crm-stat-lbl { font-size:12px; color:var(--text-3); margin-top:2px; }
+    .crm-stat { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; position:relative; }
+    .crm-stat-ico { position:absolute; top:16px; right:16px; width:34px; height:34px; border-radius:10px; background:rgba(45,212,191,.1); display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .crm-stat-val { font-size:26px; font-weight:800; color:var(--text); letter-spacing:-.5px; margin-top:8px; }
+    .crm-stat-lbl { font-size:13px; color:var(--text-2); margin-top:4px; font-weight:600; }
+    .crm-stat-sub { font-size:11px; color:var(--text-3); margin-top:3px; }
+    .crm-chip { font-size:11px; font-weight:700; color:var(--text-3); background:rgba(255,255,255,.04); border:1px solid var(--border); padding:3px 10px; border-radius:99px; }
+    .conv-row { display:flex; align-items:center; gap:10px; margin-bottom:13px; }
+    .conv-dot { width:8px; height:8px; border-radius:99px; flex:0 0 8px; }
+    .conv-name { font-size:13px; color:var(--text-2); width:120px; flex:0 0 120px; }
+    .conv-bar-wrap { flex:1; height:6px; background:rgba(255,255,255,.05); border-radius:99px; overflow:hidden; }
+    .conv-bar { height:100%; border-radius:99px; }
+    .conv-n { font-size:13px; font-weight:700; color:var(--text); width:44px; text-align:right; }
+    .crm-list-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+    .crm-list-item:last-child { border-bottom:none; }
+    .crm-list-item:hover .crm-li-name { color:var(--accent); }
+    .crm-li-name { font-size:13px; font-weight:600; color:var(--text); }
+    .crm-li-sub { font-size:11px; color:var(--text-3); }
+    .crm-li-right { margin-left:auto; text-align:right; }
+    .crm-li-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; }
+    .crm-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .crm-table th { text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(255,255,255,.02); }
+    .crm-table td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text-2); }
+    .crm-table tr:hover td { background:rgba(255,255,255,.02); }
+    .crm-table tr { cursor:pointer; }
+    .crm-stage-pill { font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px; display:inline-block; }
     .crm-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
     .crm-toolbar input#crm-search { flex:1; min-width:200px; background:var(--card); border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); padding:10px 14px; font-family:inherit; font-size:14px; outline:none; }
     .crm-toolbar input#crm-search:focus { border-color:var(--accent); }
@@ -770,11 +792,14 @@
       <span class="brand-name">DOIT <b>SEND</b></span>
     </div>
 
-    <button class="nav-item active" id="tab-crm"><span class="nav-ico">▦</span> Dashboard</button>
+    <div class="sidebar-label" style="padding-top:0">Operação</div>
+    <button class="nav-item active" id="tab-crm" data-crmview="overview"><span class="nav-ico">▦</span> Visão geral</button>
+    <button class="nav-item" id="tab-crm-pipeline" data-crmview="pipeline"><span class="nav-ico">⑃</span> Pipeline</button>
+    <button class="nav-item" id="tab-crm-leads" data-crmview="leads"><span class="nav-ico">☰</span> Todos os leads</button>
     <button class="nav-item" id="tab-disparador"><span class="nav-ico">📤</span> Disparador</button>
-    <button class="nav-item" id="tab-agente"><span class="nav-ico">🤖</span> Agente IA</button>
+    <button class="nav-item" id="tab-agente"><span class="nav-ico">🤖</span> WhatsApp / Agente</button>
 
-    <div class="sidebar-label">Outros</div>
+    <div class="sidebar-label">Gestão</div>
     <a class="nav-item" href="https://129.121.54.221" target="_blank" rel="noopener"><span class="nav-ico">🔌</span> Painel Evolution</a>
 
     <div class="sidebar-spacer"></div>
@@ -814,40 +839,66 @@
   <!-- ═══ PAINEL CRM ═══════════════════════════════════════════ -->
   <div id="panel-crm">
 
-    <!-- Cards de resumo -->
-    <div class="crm-stats" id="crm-stats">
-      <div class="crm-stat"><div class="crm-stat-val" id="crm-total">—</div><div class="crm-stat-lbl">Leads totais</div></div>
-      <div class="crm-stat"><div class="crm-stat-val" id="crm-pipeline">—</div><div class="crm-stat-lbl">Em negociação</div></div>
-      <div class="crm-stat"><div class="crm-stat-val" id="crm-ganhos">—</div><div class="crm-stat-lbl">Ganhos</div></div>
-      <div class="crm-stat"><div class="crm-stat-val" id="crm-valor">—</div><div class="crm-stat-lbl">Valor ganho</div></div>
+    <!-- ── VISÃO GERAL ── -->
+    <div id="crm-view-overview">
+      <div class="crm-stats" id="crm-stats">
+        <div class="crm-stat"><div class="crm-stat-ico">💰</div><div class="crm-stat-val" id="crm-faturamento">R$ 0</div><div class="crm-stat-lbl">Faturamento</div><div class="crm-stat-sub" id="crm-faturamento-sub">0 vendas fechadas</div></div>
+        <div class="crm-stat"><div class="crm-stat-ico">📈</div><div class="crm-stat-val" id="crm-conversao">0%</div><div class="crm-stat-lbl">Conversão geral</div><div class="crm-stat-sub" id="crm-conversao-sub">0 leads no período</div></div>
+        <div class="crm-stat"><div class="crm-stat-ico">🎯</div><div class="crm-stat-val" id="crm-previsao">R$ 0</div><div class="crm-stat-lbl">Previsão ponderada</div><div class="crm-stat-sub">Valor × probabilidade da etapa</div></div>
+        <div class="crm-stat"><div class="crm-stat-ico">⏰</div><div class="crm-stat-val" id="crm-atrasadas">0</div><div class="crm-stat-lbl">Atividades atrasadas</div><div class="crm-stat-sub">Próximas ações vencidas</div></div>
+      </div>
+
+      <div class="crm-charts">
+        <div class="card" style="padding:20px">
+          <div class="row-between"><div><div class="card-title" style="font-size:15px">Faturamento acumulado</div><div class="card-sub">Vendas concluídas nos últimos meses</div></div><span class="crm-chip">BRL</span></div>
+          <div id="crm-revenue-chart" style="margin-top:14px"></div>
+        </div>
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="font-size:15px">Conversão por etapa</div>
+          <div class="card-sub" style="margin-bottom:14px">Leads ativos no pipeline</div>
+          <div id="crm-conv-etapa"></div>
+        </div>
+      </div>
+
+      <div class="crm-charts">
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="font-size:15px">Prioridades de hoje</div>
+          <div class="card-sub" style="margin-bottom:12px">Próximas ações agendadas</div>
+          <div id="crm-prioridades"></div>
+        </div>
+        <div class="card" style="padding:20px">
+          <div class="card-title" style="font-size:15px">Oportunidades em destaque</div>
+          <div class="card-sub" style="margin-bottom:12px">Maior valor ponderado</div>
+          <div id="crm-oportunidades"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Gráfico de distribuição por etapa -->
-    <div class="crm-charts">
-      <div class="card" style="padding:20px">
-        <div class="card-title" style="font-size:15px">Funil de vendas</div>
-        <div class="card-sub" style="margin-bottom:14px">Leads por etapa do pipeline</div>
-        <div id="crm-funnel"></div>
+    <!-- ── PIPELINE ── -->
+    <div id="crm-view-pipeline" class="hidden">
+      <div class="crm-toolbar">
+        <input type="text" id="crm-search" placeholder="🔍 Buscar por nome, empresa ou telefone..." />
+        <div class="crm-toolbar-actions">
+          <button class="btn-ghost btn-sm" id="btn-crm-import" title="Importar leads das conversas do Agente IA">⇩ Importar do Agente</button>
+          <button class="btn-ghost btn-sm" id="btn-crm-refresh">↺</button>
+          <button class="btn-primary btn-sm" id="btn-crm-add">＋ Novo lead</button>
+        </div>
       </div>
-      <div class="card" style="padding:20px;display:flex;flex-direction:column">
-        <div class="card-title" style="font-size:15px">Distribuição</div>
-        <div class="card-sub" style="margin-bottom:6px">Proporção por etapa</div>
-        <div id="crm-donut" style="display:flex;align-items:center;gap:18px;flex:1;justify-content:center"></div>
-      </div>
+      <div class="crm-board" id="crm-board"></div>
     </div>
 
-    <!-- Barra de ações -->
-    <div class="crm-toolbar">
-      <input type="text" id="crm-search" placeholder="🔍 Buscar por nome ou telefone..." />
-      <div class="crm-toolbar-actions">
-        <button class="btn-ghost btn-sm" id="btn-crm-import" title="Importar leads das conversas do Agente IA">⇩ Importar do Agente</button>
-        <button class="btn-ghost btn-sm" id="btn-crm-refresh">↺</button>
-        <button class="btn-primary btn-sm" id="btn-crm-add">＋ Novo lead</button>
+    <!-- ── TODOS OS LEADS (tabela) ── -->
+    <div id="crm-view-leads" class="hidden">
+      <div class="crm-toolbar">
+        <input type="text" id="crm-search-table" placeholder="🔍 Buscar..." />
+        <div class="crm-toolbar-actions">
+          <button class="btn-primary btn-sm" id="btn-crm-add2">＋ Novo lead</button>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="overflow-x:auto"><table class="crm-table" id="crm-table"></table></div>
       </div>
     </div>
-
-    <!-- Pipeline Kanban -->
-    <div class="crm-board" id="crm-board"></div>
 
   </div><!-- /panel-crm -->
 
@@ -860,14 +911,15 @@
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="field" style="margin:0"><label class="field-label">Nome</label><input type="text" id="crm-f-name" placeholder="Nome do contato" /></div>
+        <div class="field" style="margin:0"><label class="field-label">Empresa / Ótica</label><input type="text" id="crm-f-company" placeholder="Nome da empresa" /></div>
         <div class="field" style="margin:0"><label class="field-label">Telefone (WhatsApp)</label><input type="text" id="crm-f-phone" placeholder="5511999999999" /></div>
-        <div class="field" style="margin:0"><label class="field-label">Etapa</label>
-          <select id="crm-f-stage"></select>
-        </div>
         <div class="field" style="margin:0"><label class="field-label">Valor (R$)</label><input type="number" id="crm-f-value" placeholder="0" /></div>
+        <div class="field" style="margin:0"><label class="field-label">Etapa</label><select id="crm-f-stage"></select></div>
+        <div class="field" style="margin:0"><label class="field-label">Próxima ação em</label><input type="datetime-local" id="crm-f-nextat" /></div>
       </div>
+      <div class="field"><label class="field-label">Próxima ação</label><input type="text" id="crm-f-next" placeholder="Ex: ligar, enviar proposta, follow-up..." /></div>
       <div class="field"><label class="field-label">Etiquetas (separadas por vírgula)</label><input type="text" id="crm-f-tags" placeholder="ótica, rede, indicação" /></div>
-      <div class="field"><label class="field-label">Anotações</label><textarea id="crm-f-notes" rows="4" placeholder="Histórico, contexto, próximos passos..."></textarea></div>
+      <div class="field"><label class="field-label">Anotações</label><textarea id="crm-f-notes" rows="3" placeholder="Histórico, contexto, próximos passos..."></textarea></div>
 
       <!-- Enviar WhatsApp (aparece ao editar lead com telefone) -->
       <div id="crm-msg-box" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:6px">
@@ -3591,23 +3643,30 @@ const Agent = {
 // ============================================================
 const CRM = {
   STAGES: [
-    { key:'novo',        label:'Novo',        color:'#60a5fa' },
-    { key:'contato',     label:'Em conversa', color:'#a78bfa' },
-    { key:'qualificado', label:'Qualificado', color:'#2dd4bf' },
-    { key:'reuniao',     label:'Reunião',     color:'#fbbf24' },
-    { key:'ganho',       label:'Ganho',       color:'#4ade80' },
-    { key:'perdido',     label:'Perdido',     color:'#f87171' },
+    { key:'novo',        label:'Novo',            color:'#60a5fa' },
+    { key:'msg_enviada', label:'Mensagem enviada',color:'#818cf8' },
+    { key:'respondeu',   label:'Respondeu',       color:'#a78bfa' },
+    { key:'qualificado', label:'Qualificado',     color:'#2dd4bf' },
+    { key:'reuniao',     label:'Reunião',         color:'#fbbf24' },
+    { key:'proposta',    label:'Proposta enviada',color:'#fb923c' },
+    { key:'negociacao',  label:'Negociação',      color:'#f472b6' },
+    { key:'ganho',       label:'Ganho',           color:'#4ade80' },
+    { key:'perdido',     label:'Perdido',         color:'#f87171' },
   ],
   leads: [],
   editingId: null,
   _loaded: false,
+  view: 'overview',
+
+  stageDef(key) { return this.STAGES.find(s => s.key === key) || this.STAGES[0]; },
+  brl(v) { return 'R$ ' + (Number(v)||0).toLocaleString('pt-BR', {maximumFractionDigits:0}); },
 
   init() {
-    // Popula o select de etapas do modal
     const sel = document.getElementById('crm-f-stage');
     if (sel) sel.innerHTML = this.STAGES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
     const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
     wire('btn-crm-add', () => this.openLead(null));
+    wire('btn-crm-add2', () => this.openLead(null));
     wire('btn-crm-refresh', () => this.load(true));
     wire('btn-crm-import', () => this.importFromAgent());
     wire('crm-f-cancel', () => this.closeModal());
@@ -3615,92 +3674,123 @@ const CRM = {
     wire('crm-f-save', () => this.save());
     wire('crm-f-delete', () => this.del());
     wire('crm-msg-send', () => this.sendMsg());
-    const search = document.getElementById('crm-search');
-    if (search) search.oninput = () => this.renderBoard();
+    const s1 = document.getElementById('crm-search'); if (s1) s1.oninput = () => this.renderBoard();
+    const s2 = document.getElementById('crm-search-table'); if (s2) s2.oninput = () => this.renderTable();
     const modal = document.getElementById('crm-lead-modal');
     if (modal) modal.addEventListener('click', e => { if (e.target === modal) this.closeModal(); });
   },
 
+  setView(v) {
+    this.view = v;
+    ['overview','pipeline','leads'].forEach(k => {
+      const el = document.getElementById('crm-view-' + k);
+      if (el) el.classList.toggle('hidden', k !== v);
+    });
+    const titles = { overview:'Visão geral', pipeline:'Pipeline', leads:'Todos os leads' };
+    const t = document.getElementById('page-title'); if (t) t.textContent = titles[v] || 'Dashboard';
+    if (v === 'pipeline') this.renderBoard();
+    if (v === 'leads') this.renderTable();
+    if (v === 'overview') { this.renderOverview(); }
+  },
+
   async load(force) {
-    if (this._loaded && !force) { this.renderBoard(); return; }
     try {
       const [lr, sr] = await Promise.all([
         fetch('/api/crm/leads').then(r => r.json()),
         fetch('/api/crm/stats').then(r => r.json()),
       ]);
       this.leads = (lr.leads || []);
+      this.stats = (sr.stats || {});
       this._loaded = true;
-      this.renderStats(sr.stats || {});
-      this.renderCharts(sr.stats || {});
+      this.renderOverview();
       this.renderBoard();
-    } catch (err) {
-      UI.addBanner('error', 'Erro ao carregar CRM: ' + err.message);
-    }
+      this.renderTable();
+    } catch (err) { UI.addBanner('error', 'Erro ao carregar CRM: ' + err.message); }
   },
 
-  renderStats(s) {
-    const brl = v => 'R$ ' + (Number(v)||0).toLocaleString('pt-BR');
+  async renderOverview() {
+    const s = this.stats || {};
     const byStage = s.byStage || {};
-    const emNeg = (byStage.contato||0) + (byStage.qualificado||0) + (byStage.reuniao||0);
-    document.getElementById('crm-total').textContent = s.total ?? 0;
-    document.getElementById('crm-pipeline').textContent = emNeg;
-    document.getElementById('crm-ganhos').textContent = byStage.ganho || 0;
-    document.getElementById('crm-valor').textContent = brl(s.valorGanho);
+    document.getElementById('crm-faturamento').textContent = this.brl(s.valorGanho);
+    document.getElementById('crm-faturamento-sub').textContent = (s.ganhos||0) + ' vendas fechadas';
+    document.getElementById('crm-conversao').textContent = (s.conversao||0) + '%';
+    document.getElementById('crm-conversao-sub').textContent = (s.total||0) + ' leads no período';
+    document.getElementById('crm-previsao').textContent = this.brl(s.previsaoPonderada);
+    document.getElementById('crm-atrasadas').textContent = s.atrasadas || 0;
+    this.renderRevenueChart(s.faturamentoMensal || []);
+    this.renderConvEtapa(byStage);
+    this.renderPriorities();
   },
 
-  renderCharts(s) {
-    const byStage = s.byStage || {};
-    const total = this.STAGES.reduce((a, st) => a + (byStage[st.key]||0), 0) || 1;
-    // Funil (barras horizontais)
-    const max = Math.max(1, ...this.STAGES.map(st => byStage[st.key]||0));
-    document.getElementById('crm-funnel').innerHTML = this.STAGES.map(st => {
-      const n = byStage[st.key] || 0;
-      const w = Math.round((n / max) * 100);
-      return `<div class="funnel-row">
-        <span class="funnel-label">${st.label}</span>
-        <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${w}%;background:${st.color}"></div></div>
-        <span class="funnel-count">${n}</span></div>`;
+  renderRevenueChart(meses) {
+    const box = document.getElementById('crm-revenue-chart');
+    if (!box) return;
+    const W = 520, H = 180, pad = 28;
+    const vals = meses.map(m => m.valor);
+    const max = Math.max(1, ...vals);
+    const step = meses.length > 1 ? (W - pad*2) / (meses.length - 1) : 0;
+    const pts = meses.map((m, i) => [pad + i*step, H - pad - (m.valor/max)*(H - pad*2)]);
+    const line = pts.map((p,i) => (i?'L':'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const area = line + ` L ${pad+ (meses.length-1)*step} ${H-pad} L ${pad} ${H-pad} Z`;
+    const labels = meses.map((m,i) => `<text x="${pad+i*step}" y="${H-8}" text-anchor="middle" fill="#475569" font-size="10">${m.label}</text>`).join('');
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">
+      <defs><linearGradient id="revg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2dd4bf" stop-opacity=".35"/><stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/></linearGradient></defs>
+      <path d="${area}" fill="url(#revg)"/>
+      <path d="${line}" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#2dd4bf"/>`).join('')}
+      ${labels}</svg>`;
+  },
+
+  renderConvEtapa(byStage) {
+    const box = document.getElementById('crm-conv-etapa');
+    if (!box) return;
+    const active = this.STAGES.filter(s => s.key !== 'perdido');
+    const max = Math.max(1, ...active.map(s => byStage[s.key]||0));
+    box.innerHTML = active.map(s => {
+      const n = byStage[s.key] || 0; const w = Math.round((n/max)*100);
+      return `<div class="conv-row"><span class="conv-dot" style="background:${s.color}"></span>
+        <span class="conv-name">${s.label}</span>
+        <div class="conv-bar-wrap"><div class="conv-bar" style="width:${w}%;background:${s.color}"></div></div>
+        <span class="conv-n">${n}</span></div>`;
     }).join('');
-    // Donut (SVG)
-    let acc = 0; const R = 52, C = 2*Math.PI*R; const segs = [];
-    this.STAGES.forEach(st => {
-      const n = byStage[st.key] || 0; if (!n) return;
-      const frac = n/total; const len = frac*C;
-      segs.push(`<circle r="${R}" cx="70" cy="70" fill="none" stroke="${st.color}" stroke-width="18" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 70 70)"/>`);
-      acc += len;
-    });
-    const legend = this.STAGES.filter(st => byStage[st.key]).map(st =>
-      `<div class="donut-leg-item"><span class="donut-leg-dot" style="background:${st.color}"></span>${st.label} <b style="color:var(--text);margin-left:auto">${byStage[st.key]}</b></div>`).join('');
-    document.getElementById('crm-donut').innerHTML = `
-      <svg width="140" height="140" viewBox="0 0 140 140">${segs.join('') || `<circle r="52" cx="70" cy="70" fill="none" stroke="#1a2236" stroke-width="18"/>`}
-        <text x="70" y="66" text-anchor="middle" fill="#fff" font-size="24" font-weight="800">${s.total||0}</text>
-        <text x="70" y="84" text-anchor="middle" fill="#94a3b8" font-size="10">leads</text></svg>
-      <div class="donut-legend">${legend || '<span style="color:var(--text-3);font-size:12px">Sem dados</span>'}</div>`;
+  },
+
+  async renderPriorities() {
+    try {
+      const j = await fetch('/api/crm/priorities').then(r => r.json());
+      const fmtDate = d => { if (!d) return ''; const dt = new Date(d); const hoje = new Date(); const venc = dt < hoje;
+        return `<span style="color:${venc?'#f87171':'var(--text-3)'}">${dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} ${dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}${venc?' ⚠':''}</span>`; };
+      const hoje = (j.hoje||[]).map(l => `<div class="crm-list-item" onclick="CRM.openById('${l.id}')">
+        <div style="flex:1"><div class="crm-li-name">${esc(l.name || l.company || l.phone || 'Sem nome')}</div>
+        <div class="crm-li-sub">${esc(l.next_action || 'Follow-up')}</div></div>
+        <div class="crm-li-right"><div style="font-size:11px">${fmtDate(l.next_action_at)}</div></div></div>`).join('');
+      document.getElementById('crm-prioridades').innerHTML = hoje || '<div class="crm-empty">Nenhuma ação agendada. Defina a “próxima ação” de um lead.</div>';
+      const opp = (j.oportunidades||[]).map(l => { const d = this.stageDef(l.stage);
+        return `<div class="crm-list-item" onclick="CRM.openById('${l.id}')">
+        <div style="flex:1"><div class="crm-li-name">${esc(l.name || l.company || l.phone || 'Sem nome')}</div>
+        <div class="crm-li-sub">${esc(l.company||'')}</div></div>
+        <div class="crm-li-right"><div class="crm-card-val">${this.brl(l.value)}</div>
+        <span class="crm-li-badge" style="background:${d.color}22;color:${d.color}">${d.label}</span></div></div>`; }).join('');
+      document.getElementById('crm-oportunidades').innerHTML = opp || '<div class="crm-empty">Nenhuma oportunidade. Adicione valor aos seus leads.</div>';
+    } catch (_) {}
   },
 
   renderBoard() {
     const board = document.getElementById('crm-board');
     if (!board) return;
     const q = (document.getElementById('crm-search')?.value || '').toLowerCase().trim();
-    const filtered = q ? this.leads.filter(l => (l.name||'').toLowerCase().includes(q) || (l.phone||'').includes(q)) : this.leads;
+    const filtered = q ? this.leads.filter(l => (l.name||'').toLowerCase().includes(q) || (l.company||'').toLowerCase().includes(q) || (l.phone||'').includes(q)) : this.leads;
     board.innerHTML = '';
     this.STAGES.forEach(st => {
       const items = filtered.filter(l => l.stage === st.key);
       const col = document.createElement('div');
       col.className = 'crm-col'; col.dataset.stage = st.key;
-      col.innerHTML = `<div class="crm-col-head">
-          <span class="crm-col-title"><span class="crm-col-dot" style="background:${st.color}"></span>${st.label}</span>
-          <span class="crm-col-count">${items.length}</span></div>`;
+      col.innerHTML = `<div class="crm-col-head"><span class="crm-col-title"><span class="crm-col-dot" style="background:${st.color}"></span>${st.label}</span><span class="crm-col-count">${items.length}</span></div>`;
       items.forEach(l => col.appendChild(this._card(l)));
       if (!items.length) { const e = document.createElement('div'); e.className='crm-empty'; e.textContent='—'; col.appendChild(e); }
-      // Drag & drop
       col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
       col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
-      col.addEventListener('drop', e => {
-        e.preventDefault(); col.classList.remove('drag-over');
-        const id = e.dataTransfer.getData('text/id');
-        this.moveStage(id, st.key);
-      });
+      col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('drag-over'); this.moveStage(e.dataTransfer.getData('text/id'), st.key); });
       board.appendChild(col);
     });
   },
@@ -3709,9 +3799,9 @@ const CRM = {
     const c = document.createElement('div');
     c.className = 'crm-card'; c.draggable = true;
     const tags = (l.tags||[]).slice(0,3).map(t => `<span class="crm-tag">${esc(t)}</span>`).join('');
-    const val = Number(l.value)>0 ? `<span class="crm-card-val">R$ ${Number(l.value).toLocaleString('pt-BR')}</span>` : '';
-    c.innerHTML = `<div class="crm-card-name">${esc(l.name || l.phone || 'Sem nome')}</div>
-      ${l.phone ? `<div class="crm-card-phone">📱 ${esc(l.phone)}</div>` : ''}
+    const val = Number(l.value)>0 ? `<span class="crm-card-val">${this.brl(l.value)}</span>` : '';
+    c.innerHTML = `<div class="crm-card-name">${esc(l.name || l.company || l.phone || 'Sem nome')}</div>
+      ${l.company ? `<div class="crm-card-phone">🏢 ${esc(l.company)}</div>` : (l.phone ? `<div class="crm-card-phone">📱 ${esc(l.phone)}</div>` : '')}
       <div class="crm-card-meta"><div class="crm-card-tags">${tags}</div>${val}</div>`;
     c.addEventListener('dragstart', e => { e.dataTransfer.setData('text/id', l.id); c.classList.add('dragging'); });
     c.addEventListener('dragend', () => c.classList.remove('dragging'));
@@ -3719,57 +3809,73 @@ const CRM = {
     return c;
   },
 
+  renderTable() {
+    const tb = document.getElementById('crm-table');
+    if (!tb) return;
+    const q = (document.getElementById('crm-search-table')?.value || '').toLowerCase().trim();
+    const rows = (q ? this.leads.filter(l => (l.name||'').toLowerCase().includes(q) || (l.company||'').toLowerCase().includes(q) || (l.phone||'').includes(q)) : this.leads);
+    tb.innerHTML = `<thead><tr><th>Nome</th><th>Empresa</th><th>Telefone</th><th>Etapa</th><th>Valor</th><th>Próxima ação</th></tr></thead>
+      <tbody>${rows.map(l => { const d = this.stageDef(l.stage);
+        const na = l.next_action_at ? new Date(l.next_action_at).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) : '';
+        return `<tr onclick="CRM.openById('${l.id}')">
+        <td style="color:var(--text);font-weight:600">${esc(l.name||'—')}</td>
+        <td>${esc(l.company||'—')}</td><td>${esc(l.phone||'—')}</td>
+        <td><span class="crm-stage-pill" style="background:${d.color}22;color:${d.color}">${d.label}</span></td>
+        <td>${Number(l.value)>0?this.brl(l.value):'—'}</td>
+        <td>${esc(l.next_action||'')} ${na}</td></tr>`; }).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-3)">Nenhum lead ainda.</td></tr>'}</tbody>`;
+  },
+
+  openById(id) { const l = this.leads.find(x => x.id === id); if (l) this.openLead(l); },
+
   async moveStage(id, stage) {
     const lead = this.leads.find(l => l.id === id);
     if (!lead || lead.stage === stage) return;
     lead.stage = stage; this.renderBoard();
-    try {
-      await fetch('/api/crm/leads/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ stage }) });
-      this.refreshStats();
-    } catch (_) { UI.addBanner('error', 'Erro ao mover lead'); }
+    try { await fetch('/api/crm/leads/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ stage }) }); await this.refreshStats(); }
+    catch (_) { UI.addBanner('error', 'Erro ao mover lead'); }
   },
 
   async refreshStats() {
-    try { const sr = await fetch('/api/crm/stats').then(r=>r.json()); this.renderStats(sr.stats||{}); this.renderCharts(sr.stats||{}); } catch(_){}
+    try { const sr = await fetch('/api/crm/stats').then(r=>r.json()); this.stats = sr.stats||{}; this.renderOverview(); } catch(_){}
   },
 
   openLead(l) {
     this.editingId = l ? l.id : null;
     document.getElementById('crm-modal-title').textContent = l ? 'Editar lead' : 'Novo lead';
-    document.getElementById('crm-f-name').value = l?.name || '';
-    document.getElementById('crm-f-phone').value = l?.phone || '';
-    document.getElementById('crm-f-stage').value = l?.stage || 'novo';
-    document.getElementById('crm-f-value').value = l?.value || '';
-    document.getElementById('crm-f-tags').value = (l?.tags||[]).join(', ');
-    document.getElementById('crm-f-notes').value = l?.notes || '';
+    const v = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    v('crm-f-name', l?.name || ''); v('crm-f-company', l?.company || '');
+    v('crm-f-phone', l?.phone || ''); v('crm-f-stage', l?.stage || 'novo');
+    v('crm-f-value', l?.value || ''); v('crm-f-next', l?.next_action || '');
+    v('crm-f-nextat', l?.next_action_at ? new Date(l.next_action_at).toISOString().slice(0,16) : '');
+    v('crm-f-tags', (l?.tags||[]).join(', ')); v('crm-f-notes', l?.notes || '');
     document.getElementById('crm-f-delete').style.display = l ? '' : 'none';
     const msgBox = document.getElementById('crm-msg-box');
     msgBox.style.display = (l && l.phone) ? 'block' : 'none';
-    document.getElementById('crm-msg-text').value = '';
-    document.getElementById('crm-msg-status').textContent = '';
+    v('crm-msg-text', ''); document.getElementById('crm-msg-status').textContent = '';
     document.getElementById('crm-lead-modal').classList.remove('hidden');
   },
   closeModal() { document.getElementById('crm-lead-modal').classList.add('hidden'); },
 
   async save() {
+    const g = id => document.getElementById(id).value;
+    const nextat = g('crm-f-nextat');
     const body = {
-      name: document.getElementById('crm-f-name').value.trim(),
-      phone: document.getElementById('crm-f-phone').value.trim(),
-      stage: document.getElementById('crm-f-stage').value,
-      value: parseFloat(document.getElementById('crm-f-value').value) || 0,
-      tags: document.getElementById('crm-f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
-      notes: document.getElementById('crm-f-notes').value,
+      name: g('crm-f-name').trim(), company: g('crm-f-company').trim(),
+      phone: g('crm-f-phone').trim(), stage: g('crm-f-stage'),
+      value: parseFloat(g('crm-f-value')) || 0,
+      next_action: g('crm-f-next').trim(),
+      next_action_at: nextat ? new Date(nextat).toISOString() : '',
+      tags: g('crm-f-tags').split(',').map(t=>t.trim()).filter(Boolean),
+      notes: g('crm-f-notes'),
     };
-    if (!body.name && !body.phone) { UI.addBanner('warning','Informe ao menos nome ou telefone.'); return; }
+    if (!body.name && !body.phone && !body.company) { UI.addBanner('warning','Informe ao menos nome, empresa ou telefone.'); return; }
     const btn = document.getElementById('crm-f-save'); btn.disabled = true; btn.textContent = 'Salvando...';
     try {
       const url = this.editingId ? '/api/crm/leads/' + this.editingId : '/api/crm/leads';
-      const method = this.editingId ? 'PATCH' : 'POST';
-      const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const r = await fetch(url, { method: this.editingId ? 'PATCH' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'Erro');
-      this.closeModal();
-      await this.load(true);
+      this.closeModal(); await this.load(true);
       UI.addBanner('info', this.editingId ? '✓ Lead atualizado' : '✓ Lead criado');
     } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
     finally { btn.disabled = false; btn.textContent = 'Salvar'; }
@@ -3777,22 +3883,18 @@ const CRM = {
 
   async del() {
     if (!this.editingId || !confirm('Excluir este lead?')) return;
-    try {
-      await fetch('/api/crm/leads/' + this.editingId, { method:'DELETE' });
-      this.closeModal(); await this.load(true);
-      UI.addBanner('info', 'Lead excluído');
-    } catch (err) { UI.addBanner('error', 'Erro ao excluir'); }
+    try { await fetch('/api/crm/leads/' + this.editingId, { method:'DELETE' }); this.closeModal(); await this.load(true); UI.addBanner('info', 'Lead excluído'); }
+    catch (err) { UI.addBanner('error', 'Erro ao excluir'); }
   },
 
   async importFromAgent() {
-    const btn = document.getElementById('btn-crm-import'); btn.disabled = true; btn.textContent = 'Importando...';
+    const btn = document.getElementById('btn-crm-import'); if (btn){btn.disabled = true; btn.textContent = 'Importando...';}
     try {
-      const r = await fetch('/api/crm/import-conversations', { method:'POST' });
-      const j = await r.json();
+      const j = await fetch('/api/crm/import-conversations', { method:'POST' }).then(r => r.json());
       await this.load(true);
       UI.addBanner('info', j.imported ? `✓ ${j.imported} lead(s) importado(s) do Agente IA` : 'Nenhum lead novo para importar');
     } catch (err) { UI.addBanner('error', 'Erro ao importar: ' + err.message); }
-    finally { btn.disabled = false; btn.textContent = '⇩ Importar do Agente'; }
+    finally { if (btn){btn.disabled = false; btn.textContent = '⇩ Importar do Agente';} }
   },
 
   async sendMsg() {
@@ -3800,8 +3902,7 @@ const CRM = {
     const text = document.getElementById('crm-msg-text').value.trim();
     const status = document.getElementById('crm-msg-status');
     if (!text) { status.textContent = 'Digite uma mensagem.'; return; }
-    const btn = document.getElementById('crm-msg-send'); btn.disabled = true; btn.textContent = '...';
-    status.textContent = 'Enviando...';
+    const btn = document.getElementById('crm-msg-send'); btn.disabled = true; btn.textContent = '...'; status.textContent = 'Enviando...';
     try {
       const r = await fetch('/api/crm/leads/' + this.editingId + '/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
       const j = await r.json();
@@ -3816,19 +3917,19 @@ const CRM = {
 // Troca de abas
 document.addEventListener('DOMContentLoaded', () => {
   const panels = { crm:'panel-crm', disparador:'panel-disparador', agente:'panel-agente' };
-  const tabs   = { crm:'tab-crm', disparador:'tab-disparador', agente:'tab-agente' };
-  const titles = { crm:'Dashboard', disparador:'Disparador', agente:'Agente IA' };
-  function showTab(which) {
-    Object.entries(panels).forEach(([k,id]) => document.getElementById(id).classList.toggle('hidden', k !== which));
-    Object.entries(tabs).forEach(([k,id]) => document.getElementById(id).classList.toggle('active', k === which));
-    const t = document.getElementById('page-title'); if (t) t.textContent = titles[which] || '';
-  }
-  document.getElementById('tab-crm').onclick = () => { showTab('crm'); CRM.load(); };
-  document.getElementById('tab-disparador').onclick = () => showTab('disparador');
+  // Todos os botões de nav e qual painel/subvista cada um ativa
+  const navBtns = ['tab-crm','tab-crm-pipeline','tab-crm-leads','tab-disparador','tab-agente'];
+  function setActiveNav(id) { navBtns.forEach(b => { const el = document.getElementById(b); if (el) el.classList.toggle('active', b === id); }); }
+  function showPanel(which) { Object.entries(panels).forEach(([k,pid]) => document.getElementById(pid).classList.toggle('hidden', k !== which)); }
+
+  document.getElementById('tab-crm').onclick = () => { showPanel('crm'); setActiveNav('tab-crm'); CRM.setView('overview'); };
+  document.getElementById('tab-crm-pipeline').onclick = () => { showPanel('crm'); setActiveNav('tab-crm-pipeline'); CRM.setView('pipeline'); };
+  document.getElementById('tab-crm-leads').onclick = () => { showPanel('crm'); setActiveNav('tab-crm-leads'); CRM.setView('leads'); };
+  document.getElementById('tab-disparador').onclick = () => { showPanel('disparador'); setActiveNav('tab-disparador'); document.getElementById('page-title').textContent = 'Disparador'; };
   document.getElementById('tab-agente').onclick = () => {
-    showTab('agente');
-    Agent.autoProbeKey();
-    Agent.loadConversations();
+    showPanel('agente'); setActiveNav('tab-agente');
+    document.getElementById('page-title').textContent = 'WhatsApp / Agente';
+    Agent.autoProbeKey(); Agent.loadConversations();
   };
   Agent.init();
   CRM.init();

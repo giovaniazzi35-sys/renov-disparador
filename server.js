@@ -1732,7 +1732,20 @@ app.delete('/api/agent/conversation/:phone', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // CRM — leads / pipeline (por usuário)
 // ══════════════════════════════════════════════════════════════
-const CRM_STAGES = ['novo', 'contato', 'qualificado', 'reuniao', 'ganho', 'perdido'];
+// Etapas com probabilidade de fechamento (para a previsão ponderada)
+const CRM_STAGE_DEFS = [
+  { key: 'novo',        prob: 0.05 },
+  { key: 'msg_enviada', prob: 0.10 },
+  { key: 'respondeu',   prob: 0.20 },
+  { key: 'qualificado', prob: 0.40 },
+  { key: 'reuniao',     prob: 0.60 },
+  { key: 'proposta',    prob: 0.75 },
+  { key: 'negociacao',  prob: 0.90 },
+  { key: 'ganho',       prob: 1.00 },
+  { key: 'perdido',     prob: 0.00 },
+];
+const CRM_STAGES = CRM_STAGE_DEFS.map(s => s.key);
+const CRM_STAGE_PROB = Object.fromEntries(CRM_STAGE_DEFS.map(s => [s.key, s.prob]));
 
 // Mapeia o status do agente IA para uma etapa do CRM
 function agentStatusToStage(status) {
@@ -1740,7 +1753,7 @@ function agentStatusToStage(status) {
     case 'potencial':      return 'qualificado';
     case 'agencia':        return 'perdido';
     case 'desqualificado': return 'perdido';
-    default:               return 'contato';
+    default:               return 'respondeu';
   }
 }
 
@@ -1758,16 +1771,21 @@ app.get('/api/crm/leads', requireAuth, async (req, res) => {
 // Cria um lead
 app.post('/api/crm/leads', requireAuth, async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
-  const { name, phone, stage, tags, notes, value, source } = req.body;
+  const { name, phone, stage, tags, notes, value, source, company, next_action, next_action_at } = req.body;
+  const st = CRM_STAGES.includes(stage) ? stage : 'novo';
   const lead = {
     owner: req.session.email,
     name: (name || '').trim(),
     phone: (phone || '').replace(/\D/g, ''),
-    stage: CRM_STAGES.includes(stage) ? stage : 'novo',
+    company: (company || '').trim(),
+    stage: st,
     tags: Array.isArray(tags) ? tags : [],
     notes: notes || '',
     value: Number(value) || 0,
     source: source || 'manual',
+    next_action: next_action || '',
+    next_action_at: next_action_at || null,
+    won_at: st === 'ganho' ? new Date().toISOString() : null,
     last_activity: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -1786,11 +1804,14 @@ app.post('/api/crm/leads', requireAuth, async (req, res) => {
 app.patch('/api/crm/leads/:id', requireAuth, async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
   const id = req.params.id;
-  const allowed = ['name', 'phone', 'stage', 'tags', 'notes', 'value', 'source'];
+  const allowed = ['name', 'phone', 'stage', 'tags', 'notes', 'value', 'source', 'company', 'next_action', 'next_action_at'];
   const patch = { updated_at: new Date().toISOString(), last_activity: new Date().toISOString() };
   for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
   if (patch.phone !== undefined) patch.phone = String(patch.phone).replace(/\D/g, '');
   if (patch.stage !== undefined && !CRM_STAGES.includes(patch.stage)) delete patch.stage;
+  // Marca a data de fechamento ao mover para "ganho"
+  if (patch.stage === 'ganho') patch.won_at = new Date().toISOString();
+  if (patch.next_action_at === '') patch.next_action_at = null;
   try {
     const owner = encodeURIComponent(req.session.email);
     const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?id=eq.${id}&owner=eq.${owner}`, {
@@ -1886,16 +1907,66 @@ app.get('/api/crm/stats', requireAuth, async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, stats: {} });
   try {
     const owner = encodeURIComponent(req.session.email);
-    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${owner}&select=stage,value`, { method: 'GET', headers: SB_HEADERS });
-    const rows = await r.json();
-    const byStage = {}; let total = 0, valorGanho = 0, valorPipeline = 0;
-    CRM_STAGES.forEach(s => byStage[s] = 0);
-    (Array.isArray(rows) ? rows : []).forEach(l => {
-      byStage[l.stage] = (byStage[l.stage] || 0) + 1; total++;
-      if (l.stage === 'ganho') valorGanho += Number(l.value) || 0;
-      else if (l.stage !== 'perdido') valorPipeline += Number(l.value) || 0;
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${owner}&select=stage,value,next_action_at,won_at`, { method: 'GET', headers: SB_HEADERS });
+    const leads = await r.json();
+    const arr = Array.isArray(leads) ? leads : [];
+
+    const byStage = {}; CRM_STAGES.forEach(s => byStage[s] = 0);
+    let total = 0, ganhos = 0, valorGanho = 0, previsaoPonderada = 0, atrasadas = 0;
+    const now = Date.now();
+    // Faturamento acumulado por mês (últimos 6 meses)
+    const meses = [];
+    const d0 = new Date(); d0.setDate(1);
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(d0.getFullYear(), d0.getMonth() - i, 1);
+      meses.push({ key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][d.getMonth()], valor: 0 });
+    }
+    const mesIndex = Object.fromEntries(meses.map((m, i) => [m.key, i]));
+
+    arr.forEach(l => {
+      const st = l.stage; const val = Number(l.value) || 0;
+      byStage[st] = (byStage[st] || 0) + 1; total++;
+      if (st === 'ganho') {
+        ganhos++; valorGanho += val;
+        const wd = l.won_at ? new Date(l.won_at) : null;
+        if (wd) { const k = `${wd.getFullYear()}-${String(wd.getMonth()+1).padStart(2,'0')}`; if (k in mesIndex) meses[mesIndex[k]].valor += val; }
+      } else if (st !== 'perdido') {
+        previsaoPonderada += val * (CRM_STAGE_PROB[st] || 0);
+      }
+      // Atividades atrasadas: próxima ação vencida em leads ainda abertos
+      if (l.next_action_at && st !== 'ganho' && st !== 'perdido' && new Date(l.next_action_at).getTime() < now) atrasadas++;
     });
-    res.json({ ok: true, stats: { total, byStage, valorGanho, valorPipeline } });
+    const fechados = ganhos + (byStage['perdido'] || 0);
+    const conversao = fechados > 0 ? (ganhos / fechados) * 100 : 0;
+
+    res.json({ ok: true, stats: {
+      total, byStage, ganhos, valorGanho,
+      previsaoPonderada: Math.round(previsaoPonderada),
+      conversao: Math.round(conversao * 10) / 10,
+      atrasadas, faturamentoMensal: meses,
+    }});
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Prioridades de hoje + oportunidades em destaque
+app.get('/api/crm/priorities', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, hoje: [], oportunidades: [] });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${owner}&select=id,name,phone,company,stage,value,next_action,next_action_at&limit=500`, { method: 'GET', headers: SB_HEADERS });
+    const leads = await r.json();
+    const list = Array.isArray(leads) ? leads : [];
+    const abertos = list.filter(l => l.stage !== 'ganho' && l.stage !== 'perdido');
+    // Prioridades: com próxima ação, ordenadas pela data (vencidas primeiro)
+    const hoje = abertos.filter(l => l.next_action_at)
+      .sort((a, b) => new Date(a.next_action_at) - new Date(b.next_action_at))
+      .slice(0, 6);
+    // Oportunidades: maior valor ponderado
+    const oportunidades = abertos
+      .map(l => ({ ...l, score: (Number(l.value)||0) * (CRM_STAGE_PROB[l.stage]||0) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+    res.json({ ok: true, hoje, oportunidades });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
