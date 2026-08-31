@@ -798,6 +798,7 @@
     <button class="nav-item" id="tab-crm-pipeline" data-crmview="pipeline"><span class="nav-ico">⑃</span> Pipeline</button>
     <button class="nav-item" id="tab-crm-leads" data-crmview="leads"><span class="nav-ico">☰</span> Todos os leads</button>
     <button class="nav-item" id="tab-calls"><span class="nav-ico">📞</span> Ligações</button>
+    <button class="nav-item" id="tab-lists"><span class="nav-ico">📁</span> Listas</button>
     <button class="nav-item" id="tab-disparador"><span class="nav-ico">📤</span> Disparador</button>
     <button class="nav-item" id="tab-agente"><span class="nav-ico">🤖</span> WhatsApp / Agente</button>
 
@@ -950,6 +951,51 @@
     </div>
 
   </div><!-- /panel-calls -->
+
+  <!-- ═══ PAINEL LISTAS ═══════════════════════════════════════ -->
+  <div id="panel-lists" class="hidden">
+    <div class="card" style="padding:20px;margin-bottom:18px">
+      <div class="card-title" style="font-size:15px">Importar lista de contatos</div>
+      <div class="card-sub" style="margin-bottom:14px">Formatos aceitos: CSV, Excel (.xlsx/.xls) e PDF. O sistema detecta nome, telefone e e-mail automaticamente.</div>
+      <div id="lists-dropzone" style="border:2px dashed var(--border);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:border-color .15s">
+        <div style="font-size:28px;margin-bottom:8px">📂</div>
+        <div style="font-weight:600">Clique para escolher um arquivo ou arraste aqui</div>
+        <div class="card-sub" style="margin-top:4px">Máximo recomendado: 4 MB por arquivo</div>
+        <input type="file" id="lists-file-input" accept=".csv,.xlsx,.xls,.pdf,.txt" style="display:none" />
+      </div>
+      <div id="lists-import-status" style="margin-top:12px;font-size:13px;color:var(--text-3)"></div>
+    </div>
+
+    <div class="row-between" style="margin-bottom:14px">
+      <div class="card-title" style="margin:0">Minhas listas</div>
+      <button class="btn-ghost btn-sm" id="btn-lists-refresh">↺</button>
+    </div>
+    <div id="lists-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
+  </div><!-- /panel-lists -->
+
+  <!-- Modal de detalhe da lista (contatos + ações em massa) -->
+  <div class="modal-overlay hidden" id="list-detail-modal">
+    <div class="modal-box" style="max-width:820px;text-align:left">
+      <div class="row-between" style="margin-bottom:8px">
+        <div class="modal-title" style="margin:0" id="list-detail-title">Lista</div>
+        <button class="btn-icon" id="list-detail-close" style="font-size:18px">✕</button>
+      </div>
+      <div class="row-between" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label class="toggle-label" style="gap:6px"><input type="checkbox" id="list-select-all" /><span class="toggle-switch"></span></label>
+          <span class="card-sub" id="list-select-count">0 selecionados</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-ghost btn-sm" id="btn-list-send-disparador">📤 Enviar ao Disparador</button>
+          <button class="btn-ghost btn-sm" id="btn-list-to-crm">📊 Importar como leads</button>
+          <button class="btn-ghost btn-sm" id="btn-list-delete" style="color:#f87171">🗑 Excluir lista</button>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;max-height:50vh;overflow-y:auto">
+        <table class="crm-table" id="list-items-table"></table>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal de registro de ligação -->
   <div class="modal-overlay hidden" id="call-log-modal">
@@ -4142,11 +4188,176 @@ const Calls = {
   },
 };
 
+// ============================================================
+// LISTS — importar CSV/Excel/PDF e manusear os contatos
+// ============================================================
+const Lists = {
+  lists: [],
+  currentListId: null,
+  currentItems: [],
+
+  init() {
+    const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+    const drop = document.getElementById('lists-dropzone');
+    const input = document.getElementById('lists-file-input');
+    if (drop) {
+      drop.onclick = () => input.click();
+      drop.ondragover = (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent)'; };
+      drop.ondragleave = () => { drop.style.borderColor = 'var(--border)'; };
+      drop.ondrop = (e) => { e.preventDefault(); drop.style.borderColor = 'var(--border)'; if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]); };
+    }
+    if (input) input.onchange = () => { if (input.files[0]) this.handleFile(input.files[0]); input.value = ''; };
+    wire('btn-lists-refresh', () => this.load());
+    wire('list-detail-close', () => this.closeDetail());
+    wire('btn-list-delete', () => this.deleteCurrentList());
+    wire('btn-list-send-disparador', () => this.sendToDisparador());
+    wire('btn-list-to-crm', () => this.sendToCRM());
+    const selAll = document.getElementById('list-select-all');
+    if (selAll) selAll.onchange = () => {
+      document.querySelectorAll('.list-item-check').forEach(cb => cb.checked = selAll.checked);
+      this.updateSelectCount();
+    };
+  },
+
+  async handleFile(file) {
+    const status = document.getElementById('lists-import-status');
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const fmtMap = { csv:'csv', txt:'txt', xlsx:'xlsx', xls:'xls', pdf:'pdf' };
+    const format = fmtMap[ext];
+    if (!format) { status.style.color = '#f87171'; status.textContent = '✗ Formato não suportado. Use CSV, XLSX, XLS ou PDF.'; return; }
+    if (file.size > 4.5 * 1024 * 1024) { status.style.color = '#f87171'; status.textContent = '✗ Arquivo muito grande (máx. ~4 MB).'; return; }
+
+    status.style.color = 'var(--text-3)'; status.textContent = '⏳ Importando "' + file.name + '"...';
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const name = file.name.replace(/\.[^.]+$/, '');
+      const r = await fetch('/api/lists/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, format, fileBase64: base64 }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erro ao importar');
+      status.style.color = '#4ade80';
+      status.textContent = `✓ ${j.total} contato(s) importado(s) (${j.withPhone} com telefone válido).`;
+      this.load();
+    } catch (err) { status.style.color = '#f87171'; status.textContent = '✗ ' + err.message; }
+  },
+
+  async load() {
+    try {
+      const j = await fetch('/api/lists').then(r => r.json());
+      this.lists = j.lists || [];
+      const grid = document.getElementById('lists-grid');
+      if (!this.lists.length) { grid.innerHTML = '<div class="crm-empty" style="grid-column:1/-1">Nenhuma lista importada ainda.</div>'; return; }
+      grid.innerHTML = this.lists.map(l => `
+        <div class="card" style="padding:16px;cursor:pointer" onclick="Lists.openDetail('${l.id}')">
+          <div style="font-size:24px;margin-bottom:6px">${l.source_format === 'pdf' ? '📄' : (l.source_format||'').includes('xls') ? '📊' : '📋'}</div>
+          <div style="font-weight:700;font-size:14px">${esc(l.name)}</div>
+          <div class="card-sub" style="margin-top:4px">${l.total} contato(s) · ${new Date(l.created_at).toLocaleDateString('pt-BR')}</div>
+        </div>`).join('');
+    } catch (err) { UI.addBanner('error', 'Erro ao carregar listas: ' + err.message); }
+  },
+
+  async openDetail(listId) {
+    this.currentListId = listId;
+    const list = this.lists.find(l => l.id === listId);
+    document.getElementById('list-detail-title').textContent = list ? list.name : 'Lista';
+    try {
+      const j = await fetch(`/api/lists/${listId}/items`).then(r => r.json());
+      this.currentItems = j.items || [];
+      this.renderItems();
+      document.getElementById('list-detail-modal').classList.remove('hidden');
+    } catch (err) { UI.addBanner('error', 'Erro ao carregar contatos: ' + err.message); }
+  },
+  closeDetail() { document.getElementById('list-detail-modal').classList.add('hidden'); },
+
+  renderItems() {
+    const tb = document.getElementById('list-items-table');
+    tb.innerHTML = `<thead><tr><th style="width:30px"></th><th>Nome</th><th>Telefone</th><th>E-mail</th><th></th></tr></thead>
+      <tbody>${this.currentItems.map(it => `
+        <tr>
+          <td><input type="checkbox" class="list-item-check" data-id="${it.id}" onchange="Lists.updateSelectCount()" /></td>
+          <td style="color:var(--text);font-weight:600">${esc(it.name||'—')}</td>
+          <td>${esc(it.phone||'—')}</td>
+          <td>${esc(it.email||'—')}</td>
+          <td style="white-space:nowrap">
+            ${it.phone ? `<button class="btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="Lists.callItem('${esc(it.phone)}','${esc((it.name||'').replace(/'/g,"\\'"))}')">📞</button>` : ''}
+            <button class="btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;color:#f87171" onclick="Lists.deleteItem('${it.id}')">🗑</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3)">Sem contatos.</td></tr>'}</tbody>`;
+    this.updateSelectCount();
+  },
+
+  updateSelectCount() {
+    const n = document.querySelectorAll('.list-item-check:checked').length;
+    const el = document.getElementById('list-select-count'); if (el) el.textContent = n + ' selecionado(s)';
+  },
+
+  getSelectedIds() { return [...document.querySelectorAll('.list-item-check:checked')].map(cb => cb.dataset.id); },
+  getSelectedOrAllItems() {
+    const ids = this.getSelectedIds();
+    return ids.length ? this.currentItems.filter(it => ids.includes(it.id)) : this.currentItems;
+  },
+
+  // Chamada rápida a partir da lista (usa o mesmo fluxo da aba Ligações)
+  callItem(phone, name) {
+    if (typeof Calls !== 'undefined') Calls.startCall(null, phone, name);
+  },
+
+  async deleteItem(itemId) {
+    if (!confirm('Remover este contato da lista?')) return;
+    try {
+      await fetch(`/api/lists/${this.currentListId}/items/${itemId}`, { method: 'DELETE' });
+      this.currentItems = this.currentItems.filter(it => it.id !== itemId);
+      this.renderItems();
+    } catch (err) { UI.addBanner('error', 'Erro ao remover: ' + err.message); }
+  },
+
+  async deleteCurrentList() {
+    if (!this.currentListId || !confirm('Excluir esta lista inteira e todos os contatos dela?')) return;
+    try {
+      await fetch(`/api/lists/${this.currentListId}`, { method: 'DELETE' });
+      this.closeDetail(); this.load();
+      UI.addBanner('info', '✓ Lista excluída.');
+    } catch (err) { UI.addBanner('error', 'Erro ao excluir: ' + err.message); }
+  },
+
+  // Envia os contatos selecionados (ou todos) para o Disparador
+  sendToDisparador() {
+    const items = this.getSelectedOrAllItems().filter(it => it.phone);
+    if (!items.length) { UI.addBanner('warning', 'Nenhum contato com telefone para enviar.'); return; }
+    items.forEach(it => AppState.contacts.push({ name: it.name || it.phone, phone: it.phone }));
+    UI.renderContacts();
+    UI.addBanner('info', `✓ ${items.length} contato(s) enviados ao Disparador.`);
+    this.closeDetail();
+    document.getElementById('tab-disparador').click();
+  },
+
+  // Importa os contatos selecionados (ou todos) como leads do CRM
+  async sendToCRM() {
+    if (!this.currentListId) return;
+    const btn = document.getElementById('btn-list-to-crm'); btn.disabled = true; btn.textContent = 'Importando...';
+    try {
+      const r = await fetch(`/api/lists/${this.currentListId}/to-crm`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erro');
+      UI.addBanner('info', `✓ ${j.imported} lead(s) importado(s) para o CRM.`);
+      if (typeof CRM !== 'undefined') CRM.load(true);
+    } catch (err) { UI.addBanner('error', 'Erro ao importar: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = '📊 Importar como leads'; }
+  },
+};
+
 // Troca de abas
 document.addEventListener('DOMContentLoaded', () => {
-  const panels = { crm:'panel-crm', disparador:'panel-disparador', agente:'panel-agente', calls:'panel-calls' };
+  const panels = { crm:'panel-crm', disparador:'panel-disparador', agente:'panel-agente', calls:'panel-calls', lists:'panel-lists' };
   // Todos os botões de nav e qual painel/subvista cada um ativa
-  const navBtns = ['tab-crm','tab-crm-pipeline','tab-crm-leads','tab-calls','tab-disparador','tab-agente'];
+  const navBtns = ['tab-crm','tab-crm-pipeline','tab-crm-leads','tab-calls','tab-lists','tab-disparador','tab-agente'];
   function setActiveNav(id) { navBtns.forEach(b => { const el = document.getElementById(b); if (el) el.classList.toggle('active', b === id); }); }
   function showPanel(which) { Object.entries(panels).forEach(([k,pid]) => document.getElementById(pid).classList.toggle('hidden', k !== which)); }
 
@@ -4154,6 +4365,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tab-crm-pipeline').onclick = () => { showPanel('crm'); setActiveNav('tab-crm-pipeline'); CRM.setView('pipeline'); };
   document.getElementById('tab-crm-leads').onclick = () => { showPanel('crm'); setActiveNav('tab-crm-leads'); CRM.setView('leads'); };
   document.getElementById('tab-calls').onclick = () => { showPanel('calls'); setActiveNav('tab-calls'); document.getElementById('page-title').textContent = 'Ligações'; Calls.load(); };
+  document.getElementById('tab-lists').onclick = () => { showPanel('lists'); setActiveNav('tab-lists'); document.getElementById('page-title').textContent = 'Listas'; Lists.load(); };
   document.getElementById('tab-disparador').onclick = () => { showPanel('disparador'); setActiveNav('tab-disparador'); document.getElementById('page-title').textContent = 'Disparador'; };
   document.getElementById('tab-agente').onclick = () => {
     showPanel('agente'); setActiveNav('tab-agente');
@@ -4163,6 +4375,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Agent.init();
   CRM.init();
   Calls.init();
+  Lists.init();
   CRM.load(); // CRM é a aba inicial
 
   // Detecta retorno do OAuth do Google e exibe resultado

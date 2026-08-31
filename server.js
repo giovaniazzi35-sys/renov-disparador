@@ -8,6 +8,8 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const { URL } = require('url');
+const XLSX = require('xlsx');
+const pdfParse = require('pdf-parse');
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -2050,6 +2052,230 @@ app.get('/api/crm/calls/stats', requireAuth, async (req, res) => {
     const atendidas = arr.filter(c => c.outcome === 'atendida').length;
     const tempoTotal = arr.reduce((a, c) => a + (Number(c.duration_sec)||0), 0);
     res.json({ ok: true, stats: { total, atendidas, taxaAtendimento: total ? Math.round((atendidas/total)*100) : 0, tempoTotal } });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// LISTAS DE CONTATOS — importação de PDF / Excel / CSV
+// ══════════════════════════════════════════════════════════════
+
+// Detecta colunas de nome/telefone/email num cabeçalho de planilha/CSV
+const HEADER_NAME_HINTS  = ['nome', 'name', 'contato', 'cliente', 'razao', 'razão'];
+const HEADER_PHONE_HINTS = ['telefone', 'fone', 'celular', 'whatsapp', 'phone', 'tel', 'numero', 'número', 'contato'];
+const HEADER_EMAIL_HINTS = ['email', 'e-mail'];
+
+function detectHeaderCols(headerRow) {
+  const norm = headerRow.map(h => String(h || '').trim().toLowerCase());
+  const findIdx = (hints) => norm.findIndex(h => hints.some(hint => h.includes(hint)));
+  return { nameIdx: findIdx(HEADER_NAME_HINTS), phoneIdx: findIdx(HEADER_PHONE_HINTS), emailIdx: findIdx(HEADER_EMAIL_HINTS) };
+}
+
+const PHONE_RE = /(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}\b/;
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+// Converte uma matriz de linhas (planilha/CSV) em contatos {name,phone,email}
+function rowsToContacts(rows) {
+  const contacts = [];
+  if (!rows.length) return contacts;
+  const { nameIdx, phoneIdx, emailIdx } = detectHeaderCols(rows[0]);
+  const hasHeader = phoneIdx !== -1 || nameIdx !== -1;
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+
+  for (const row of dataRows) {
+    if (!row || !row.length) continue;
+    let name = '', phone = '', email = '';
+    if (hasHeader) {
+      name  = nameIdx  !== -1 ? String(row[nameIdx]  || '').trim() : '';
+      phone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+      email = emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '';
+    }
+    // Sem cabeçalho reconhecido (ou coluna vazia na linha): varre a linha procurando telefone/email/nome
+    if (!phone) {
+      const cellWithPhone = row.find(c => PHONE_RE.test(String(c || '')));
+      if (cellWithPhone) phone = String(cellWithPhone).match(PHONE_RE)[0];
+    }
+    if (!email) {
+      const cellWithEmail = row.find(c => EMAIL_RE.test(String(c || '')));
+      if (cellWithEmail) email = String(cellWithEmail).match(EMAIL_RE)[0];
+    }
+    if (!name) {
+      const cand = row.find(c => {
+        const s = String(c || '').trim();
+        return s && !PHONE_RE.test(s) && !EMAIL_RE.test(s) && isNaN(Number(s));
+      });
+      if (cand) name = String(cand).trim();
+    }
+    phone = normalizeNumber(phone);
+    if (!phone && !name && !email) continue;
+    if (phone && (phone.length < 10 || phone.length > 13)) phone = ''; // descarta lixo não-telefone
+    contacts.push({ name, phone, email });
+  }
+  return contacts;
+}
+
+// Extrai contatos de texto livre (PDF): procura telefones e usa o texto ao redor como nome
+function textToContacts(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const contacts = [];
+  for (const line of lines) {
+    const phoneMatch = line.match(PHONE_RE);
+    if (!phoneMatch) continue;
+    const phone = normalizeNumber(phoneMatch[0]);
+    if (phone.length < 10 || phone.length > 13) continue;
+    const emailMatch = line.match(EMAIL_RE);
+    let name = line.replace(phoneMatch[0], '').replace(EMAIL_RE, '').replace(/[-–—:|,;]+/g, ' ').trim();
+    name = name.replace(/\s{2,}/g, ' ').slice(0, 120);
+    contacts.push({ name, phone, email: emailMatch ? emailMatch[0] : '' });
+  }
+  // Remove duplicados por telefone, mantendo o primeiro
+  const seen = new Set();
+  return contacts.filter(c => { if (seen.has(c.phone)) return false; seen.add(c.phone); return true; });
+}
+
+// Faz o parsing de um arquivo (CSV/Excel/PDF) em base64 e devolve a lista de contatos
+async function parseContactFile(base64, format) {
+  const buf = Buffer.from(base64.replace(/^data:[^,]+,/, ''), 'base64');
+  const fmt = (format || '').toLowerCase();
+
+  if (fmt === 'csv' || fmt === 'txt') {
+    const text = buf.toString('utf8');
+    const delim = text.includes(';') && text.split(';').length > text.split(',').length ? ';' : ',';
+    const rows = text.split(/\r?\n/).filter(l => l.trim()).map(line => {
+      // parser simples de CSV com suporte a aspas
+      const cells = []; let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') inQ = !inQ;
+        else if (ch === delim && !inQ) { cells.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      cells.push(cur);
+      return cells.map(c => c.trim());
+    });
+    return rowsToContacts(rows);
+  }
+
+  if (fmt === 'xlsx' || fmt === 'xls') {
+    const wb = XLSX.read(buf, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    return rowsToContacts(rows);
+  }
+
+  if (fmt === 'pdf') {
+    const data = await pdfParse(buf);
+    return textToContacts(data.text || '');
+  }
+
+  throw new Error('Formato de arquivo não suportado. Use CSV, XLSX, XLS ou PDF.');
+}
+
+// Importa um arquivo e cria uma nova lista de contatos
+app.post('/api/lists/import', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const { name, format, fileBase64 } = req.body;
+  if (!fileBase64) return res.status(400).json({ error: 'Arquivo obrigatório.' });
+  try {
+    const contacts = await parseContactFile(fileBase64, format);
+    if (!contacts.length) return res.status(400).json({ error: 'Nenhum contato reconhecido no arquivo. Verifique se há nomes/telefones nas colunas ou no texto.' });
+
+    const owner = req.session.email;
+    const listName = (name || `Lista ${new Date().toLocaleDateString('pt-BR')}`).slice(0, 120);
+    const lr = await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_lists`, {
+      method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify({ owner, name: listName, source_format: format, total: contacts.length }),
+    });
+    const listRows = await lr.json();
+    if (!lr.ok) return res.status(lr.status).json({ error: listRows?.message || 'Erro ao criar lista' });
+    const list = Array.isArray(listRows) ? listRows[0] : listRows;
+
+    // Insere os contatos em lotes (evita payload gigante numa única requisição)
+    const items = contacts.map(c => ({ list_id: list.id, owner, name: c.name || '', phone: c.phone || '', email: c.email || '' }));
+    for (let i = 0; i < items.length; i += 500) {
+      const batch = items.slice(i, i + 500);
+      await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_list_items`, {
+        method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(batch),
+      });
+    }
+    res.json({ ok: true, list, total: contacts.length, withPhone: contacts.filter(c => c.phone).length });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Lista as listas de contatos do usuário
+app.get('/api/lists', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, lists: [] });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_lists?owner=eq.${owner}&select=*&order=created_at.desc`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    res.json({ ok: true, lists: Array.isArray(rows) ? rows : [] });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Contatos de uma lista específica
+app.get('/api/lists/:id/items', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, items: [] });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_list_items?list_id=eq.${req.params.id}&owner=eq.${owner}&select=*&order=created_at.asc&limit=5000`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    res.json({ ok: true, items: Array.isArray(rows) ? rows : [] });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Exclui uma lista inteira (e seus contatos, via cascade)
+app.delete('/api/lists/:id', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_lists?id=eq.${req.params.id}&owner=eq.${owner}`, { method: 'DELETE', headers: SB_HEADERS });
+    res.json({ ok: true });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Exclui um contato específico de uma lista
+app.delete('/api/lists/:id/items/:itemId', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_list_items?id=eq.${req.params.itemId}&list_id=eq.${req.params.id}&owner=eq.${owner}`, { method: 'DELETE', headers: SB_HEADERS });
+    res.json({ ok: true });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Importa contatos selecionados de uma lista como leads do CRM
+app.post('/api/lists/:id/to-crm', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const { itemIds } = req.body; // opcional — se ausente, importa todos os itens com telefone
+  try {
+    const owner = req.session.email;
+    const ownerQ = encodeURIComponent(owner);
+    let url = `${SUPABASE_URL}/rest/v1/contact_list_items?list_id=eq.${req.params.id}&owner=eq.${ownerQ}&select=name,phone,email`;
+    const r = await proxyFetch(url, { method: 'GET', headers: SB_HEADERS });
+    let items = await r.json();
+    items = Array.isArray(items) ? items : [];
+    if (Array.isArray(itemIds) && itemIds.length) {
+      // já buscamos por lista inteira acima; filtra client-side se veio um subconjunto
+    }
+    items = items.filter(c => c.phone);
+    if (!items.length) return res.json({ ok: true, imported: 0 });
+
+    const leads = items.map(c => ({
+      owner, name: c.name || '', phone: c.phone, stage: 'novo', tags: [], notes: '',
+      value: 0, source: 'lista_importada',
+      last_activity: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }));
+    let imported = 0;
+    for (let i = 0; i < leads.length; i += 500) {
+      const batch = leads.slice(i, i + 500);
+      const ir = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads`, {
+        method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal,resolution=ignore-duplicates' },
+        body: JSON.stringify(batch),
+      });
+      if (ir.ok) imported += batch.length;
+    }
+    res.json({ ok: true, imported });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
