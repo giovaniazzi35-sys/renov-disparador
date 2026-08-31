@@ -3941,10 +3941,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Limpa a URL sem recarregar
     history.replaceState({}, '', window.location.pathname);
     // Muda para aba Agente
-    document.getElementById('panel-agente').classList.remove('hidden');
-    document.getElementById('panel-disparador').classList.add('hidden');
-    document.getElementById('tab-agente').classList.add('active');
-    document.getElementById('tab-disparador').classList.remove('active');
+    showPanel('agente'); setActiveNav('tab-agente');
+    document.getElementById('page-title').textContent = 'WhatsApp / Agente';
     // Abre seção calendário
     document.getElementById('agent-scheduling-enabled').checked = true;
     document.getElementById('calendar-fields').style.display = '';
