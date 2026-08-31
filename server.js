@@ -8,8 +8,9 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const { URL } = require('url');
-const XLSX = require('xlsx');
-const pdfParse = require('pdf-parse');
+// XLSX/PDF são carregados sob demanda (lazy) dentro do parser — um problema
+// nessas libs opcionais nunca deve derrubar o app inteiro (já aconteceu:
+// uma versão nova do pdf-parse quebrava TODAS as rotas, incl. /login).
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -2156,6 +2157,8 @@ async function parseContactFile(base64, format) {
   }
 
   if (fmt === 'xlsx' || fmt === 'xls') {
+    let XLSX;
+    try { XLSX = require('xlsx'); } catch (e) { throw new Error('Suporte a Excel indisponível no momento.'); }
     const wb = XLSX.read(buf, { type: 'buffer' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
@@ -2163,6 +2166,8 @@ async function parseContactFile(base64, format) {
   }
 
   if (fmt === 'pdf') {
+    let pdfParse;
+    try { pdfParse = require('pdf-parse'); } catch (e) { throw new Error('Suporte a PDF indisponível no momento.'); }
     const data = await pdfParse(buf);
     return textToContacts(data.text || '');
   }
