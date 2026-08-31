@@ -1518,6 +1518,44 @@
       </div>
     </div>
 
+    <!-- ── Bloco 1.5: Provedor de WhatsApp (Evolution ou Uzapi) ── -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">🔀 Provedor de WhatsApp</div>
+      <div class="card-sub" style="margin-bottom:12px">Por padrão o app usa a Evolution API acima. Se preferir, cole suas credenciais da Uzapi e ative — o agente e o CRM passam a enviar por ela.</div>
+      <div class="field" style="margin:0 0 14px">
+        <label class="field-label">Provedor ativo</label>
+        <select id="uzapi-provider">
+          <option value="evolution">Evolution API (padrão, instância acima)</option>
+          <option value="uzapi">Uzapi</option>
+        </select>
+      </div>
+      <div id="uzapi-fields" style="display:none">
+        <div class="agent-two-col">
+          <div class="field" style="margin:0">
+            <label class="field-label">Username <span style="font-weight:400;color:var(--text-3)">— o mesmo do seu login Uzapi</span></label>
+            <input type="text" id="uzapi-username" placeholder="giovaniazzi2019" />
+          </div>
+          <div class="field" style="margin:0">
+            <label class="field-label">Phone Number ID</label>
+            <input type="text" id="uzapi-phoneid" placeholder="469722114998415" />
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Token <span style="font-weight:400;color:var(--text-3)">— gere um token de longa duração no painel da Uzapi (não use o token de teste da página de docs)</span></label>
+          <div class="token-row">
+            <input type="password" id="uzapi-token" placeholder="Cole aqui o token (Bearer)" />
+            <button class="btn-icon" id="btn-uzapi-toggle-token">👁</button>
+          </div>
+          <div id="uzapi-token-status" style="font-size:12px;color:var(--text-3);margin-top:6px"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary btn-sm" id="btn-uzapi-save">💾 Salvar</button>
+          <button class="btn-ghost btn-sm" id="btn-uzapi-test">🔬 Testar conexão</button>
+        </div>
+        <div id="uzapi-test-status" style="font-size:13px;margin-top:10px"></div>
+      </div>
+    </div>
+
     <!-- ── Bloco 2: Playbook ── -->
     <div class="card" style="margin-top:12px">
       <div class="card-title">🎯 Playbook de Atuação</div>
@@ -3717,6 +3755,18 @@ const Agent = {
     document.getElementById('btn-agent-save').onclick = () => this.save();
     document.getElementById('btn-toggle-agent').onclick = () => this.toggle();
     document.getElementById('btn-agent-test-key').onclick = () => this.testKey();
+
+    // Provedor de WhatsApp (Uzapi)
+    document.getElementById('uzapi-provider').onchange = (e) => {
+      document.getElementById('uzapi-fields').style.display = e.target.value === 'uzapi' ? '' : 'none';
+    };
+    document.getElementById('btn-uzapi-toggle-token').onclick = () => {
+      const inp = document.getElementById('uzapi-token');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    };
+    document.getElementById('btn-uzapi-save').onclick = () => this.saveUzapi();
+    document.getElementById('btn-uzapi-test').onclick = () => this.testUzapi();
+    this.loadUzapi();
     document.getElementById('btn-agent-clear-log').onclick = () => {
       document.getElementById('agent-log').innerHTML = '<div class="agent-log-line" style="color:var(--text-3)">Log limpo.</div>';
     };
@@ -3766,7 +3816,53 @@ const Agent = {
     this.loadConfig();
     this.loadConversations();
     this.startConvPoll();
-  }
+  },
+
+  async loadUzapi() {
+    try {
+      const j = await fetch('/api/agent/uzapi-settings').then(r => r.json());
+      document.getElementById('uzapi-provider').value = j.waProvider || 'evolution';
+      document.getElementById('uzapi-username').value = j.uzapiUsername || '';
+      document.getElementById('uzapi-phoneid').value = j.uzapiPhoneId || '';
+      document.getElementById('uzapi-fields').style.display = j.waProvider === 'uzapi' ? '' : 'none';
+      const tokStatus = document.getElementById('uzapi-token-status');
+      tokStatus.textContent = j.hasToken ? '✓ Token salvo (deixe em branco para manter o atual).' : 'Nenhum token salvo ainda.';
+      tokStatus.style.color = j.hasToken ? '#4ade80' : 'var(--text-3)';
+    } catch (_) {}
+  },
+
+  async saveUzapi() {
+    const waProvider = document.getElementById('uzapi-provider').value;
+    const uzapiUsername = document.getElementById('uzapi-username').value.trim();
+    const uzapiPhoneId = document.getElementById('uzapi-phoneid').value.trim();
+    const uzapiToken = document.getElementById('uzapi-token').value.trim();
+    const btn = document.getElementById('btn-uzapi-save'); btn.disabled = true; btn.textContent = 'Salvando...';
+    try {
+      const r = await fetch('/api/agent/uzapi-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ waProvider, uzapiUsername, uzapiPhoneId, uzapiToken }),
+      });
+      if (!r.ok) throw new Error('Erro ao salvar');
+      document.getElementById('uzapi-token').value = '';
+      UI.addBanner('info', '✓ Provedor de WhatsApp salvo' + (waProvider === 'uzapi' ? ' — Uzapi ativa.' : ' — Evolution API ativa.'));
+      this.loadUzapi();
+    } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = '💾 Salvar'; }
+  },
+
+  async testUzapi() {
+    const status = document.getElementById('uzapi-test-status');
+    const btn = document.getElementById('btn-uzapi-test'); btn.disabled = true; btn.textContent = '⏳ Testando...';
+    status.style.color = 'var(--text-3)'; status.textContent = 'Consultando a instância na Uzapi...';
+    try {
+      const r = await fetch('/api/agent/uzapi-test', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      status.style.color = '#4ade80';
+      status.textContent = '✓ Conexão OK! ' + (j.status ? JSON.stringify(j.status).slice(0, 200) : '');
+    } catch (err) { status.style.color = '#f87171'; status.textContent = '✗ ' + err.message; }
+    finally { btn.disabled = false; btn.textContent = '🔬 Testar conexão'; }
+  },
 };
 
 // ============================================================

@@ -310,16 +310,91 @@ async function wahaSessionStatus(session) {
   return { raw: d, connected: (d.status === 'WORKING'), status: d.status };
 }
 
-// ENVIO UNIFICADO — usado pelo agente e pelo CRM. Roteia automaticamente.
-// `wa` = { session|instanceName, instanceToken } (token só usado no Evolution)
+// ── Uzapi (https://api.uzapi.com.br) — credenciais são por usuário,
+// preenchidas por cada um no próprio app (nunca em env var global).
+function uzapiBase(cfg) {
+  return `https://api.uzapi.com.br/${encodeURIComponent(cfg.uzapiUsername)}/v1/${encodeURIComponent(cfg.uzapiPhoneId)}`;
+}
+async function uzapiSendText(cfg, phone, text, opts = {}) {
+  return proxyFetch(`${uzapiBase(cfg)}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${cfg.uzapiToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: String(phone).replace(/\D/g, ''), type: 'text', text: { body: text }, delayMessage: opts.delaySec || 0 }),
+  });
+}
+// Envia mídia via Uzapi — por link (URL pública) ou por upload prévio (base64) que retorna um id
+async function uzapiSendMedia(cfg, phone, { type, url, base64, mimetype, caption, filename }) {
+  const to = String(phone).replace(/\D/g, '');
+  let mediaRef = url ? { link: url } : null;
+  if (!mediaRef && base64) {
+    // Upload multipart para obter um media id, depois referencia no envio
+    const raw = Buffer.from(base64.replace(/^data:[^,]+,/, ''), 'base64');
+    const boundary = '----uzapi' + Date.now();
+    const fname = filename || 'arquivo';
+    const parts = [
+      `--${boundary}\r\nContent-Disposition: form-data; name="messaging_product"\r\n\r\nwhatsapp\r\n`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fname}"\r\nContent-Type: ${mimetype || 'application/octet-stream'}\r\n\r\n`,
+    ];
+    const tail = `\r\n--${boundary}--\r\n`;
+    const body = Buffer.concat([Buffer.from(parts[0] + parts[1]), raw, Buffer.from(tail)]);
+    const up = await proxyFetch(`${uzapiBase(cfg)}/media`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${cfg.uzapiToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    const upBody = await up.json().catch(() => ({}));
+    if (!up.ok || !upBody.id) return { ok: false, status: up.status, text: async () => JSON.stringify(upBody) };
+    mediaRef = { id: upBody.id };
+  }
+  if (!mediaRef) return { ok: false, status: 400, text: async () => 'Sem URL nem arquivo para enviar.' };
+  const payload = { to, type, [type]: { ...mediaRef, caption: caption || '' } };
+  return proxyFetch(`${uzapiBase(cfg)}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${cfg.uzapiToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+async function uzapiInstanceStatus(cfg) {
+  const r = await proxyFetch(`${uzapiBase(cfg)}/instance`, {
+    method: 'GET', headers: { 'Authorization': `Bearer ${cfg.uzapiToken}` },
+  });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, raw: d };
+}
+
+// ENVIO UNIFICADO — usado pelo agente, CRM e disparador. Roteia por usuário:
+// Uzapi (se configurada) > WAHA (se WAHA_URL global definida) > Evolution (padrão).
+function resolveProvider(cfg) {
+  if (cfg?.waProvider === 'uzapi' && cfg.uzapiToken && cfg.uzapiUsername && cfg.uzapiPhoneId) return 'uzapi';
+  if (WA_PROVIDER === 'waha') return 'waha';
+  return 'evolution';
+}
 async function waSendText(wa, phone, text) {
-  if (WA_PROVIDER === 'waha') {
+  const provider = resolveProvider(wa);
+  if (provider === 'uzapi') {
+    const r = await uzapiSendText(wa, phone, text, { delaySec: wa.delay ? Math.round(wa.delay / 1000) : 0 });
+    return { ok: r.ok, status: r.status, text: () => r.text() };
+  }
+  if (provider === 'waha') {
     const r = await wahaSendText(wa.session || wa.instanceName, phone, text);
     return { ok: r.ok, status: r.status, text: () => r.text() };
   }
   return proxyFetch(`${EVOLUTION_URL}/send/text`, {
     method: 'POST', headers: { apikey: wa.instanceToken },
     body: JSON.stringify({ number: String(phone).replace(/\D/g, ''), text, delay: wa.delay || 0 }),
+  });
+}
+async function waSendMedia(wa, phone, opts) {
+  const provider = resolveProvider(wa);
+  if (provider === 'uzapi') return uzapiSendMedia(wa, phone, opts);
+  if (provider === 'waha') return wahaSendMedia(wa.session || wa.instanceName, phone, opts);
+  // Evolution: usa o formato já validado no app (base64/url no campo "url")
+  const body = { number: String(phone).replace(/\D/g, ''), type: opts.type, caption: opts.caption || '', filename: opts.filename || 'arquivo' };
+  body.url = opts.url || (opts.base64 || '').replace(/^data:[^,]+,/, '');
+  if (opts.mimetype) body.mimetype = opts.mimetype;
+  return proxyFetch(`${EVOLUTION_URL}/send/media`, {
+    method: 'POST', headers: { apikey: wa.instanceToken },
+    body: JSON.stringify(body),
   });
 }
 
@@ -1420,11 +1495,7 @@ app.post('/api/agent/webhook', async (req, res) => {
         console.log(`[${ts}] 🎙 Transcrição: ${transcription.slice(0, 80)}`);
       } else {
         // Sem transcrição disponível — avisa o contato
-        await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-          method: 'POST',
-          headers: { apikey: effToken },
-          body: JSON.stringify({ number: from, text: 'Recebi seu áudio! Para agilizar, pode me mandar a mensagem por escrito? 😊', delay: 1500 }),
-        });
+        await waSendText({ ...cfg, instanceToken: effToken }, from, 'Recebi seu áudio! Para agilizar, pode me mandar a mensagem por escrito? 😊');
         return;
       }
     }
@@ -1631,14 +1702,11 @@ app.post('/api/agent/webhook', async (req, res) => {
     // Envia resposta principal — delay de "digitando" proporcional ao tamanho (mais humano)
     // Até 3 tentativas: a devolutiva PRECISA chegar
     const typingMs = Math.min(9000, 2500 + cleanReply.length * 35);
+    const waCfg = { ...cfg, instanceToken: effToken };
     let sent = false;
     for (let attempt = 1; attempt <= 3 && !sent; attempt++) {
       try {
-        const sendRes = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-          method: 'POST',
-          headers: { apikey: effToken },
-          body: JSON.stringify({ number: from, text: cleanReply, delay: attempt === 1 ? typingMs : 1000 }),
-        });
+        const sendRes = await waSendText({ ...waCfg, delay: attempt === 1 ? typingMs : 1000 }, from, cleanReply);
         if (sendRes.ok) { sent = true; break; }
         const errBody = await sendRes.text().catch(() => '');
         console.error(`[WEBHOOK] envio tentativa ${attempt} falhou (${sendRes.status}): ${errBody.slice(0, 300)}`);
@@ -1653,11 +1721,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     if (meetLink) {
       const slotBRT = formatSlotBRT(scheduleTag);
       const linkMsg = `📅 *Reunião confirmada!*\n\n🗓 ${slotBRT}\n🔗 Link para entrar:\n${meetLink}\n\nEsperamos você! 🚀`;
-      await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-        method: 'POST',
-        headers: { apikey: effToken },
-        body: JSON.stringify({ number: from, text: linkMsg, delay: 3000 }),
-      });
+      await waSendText(waCfg, from, linkMsg);
     }
 
     console.log(`[${ts}] 🤖 Agente respondeu para ${from}: ${cleanReply.slice(0, 60)}`);
@@ -1889,9 +1953,10 @@ app.post('/api/crm/leads/:id/message', requireAuth, async (req, res) => {
     if (!lead || !lead.phone) return res.status(400).json({ error: 'Lead sem telefone.' });
 
     const cfg = await getUserConfig(req.session.email);
-    if (WA_PROVIDER === 'evolution' && !cfg.instanceToken) return res.status(400).json({ error: 'Conecte uma instância de WhatsApp antes de enviar.' });
+    const provider = resolveProvider(cfg);
+    if (provider === 'evolution' && !cfg.instanceToken) return res.status(400).json({ error: 'Conecte uma instância de WhatsApp antes de enviar.' });
 
-    const sendRes = await waSendText({ instanceToken: cfg.instanceToken, session: cfg.instanceName, delay: 0 }, lead.phone, text.trim());
+    const sendRes = await waSendText(cfg, lead.phone, text.trim());
     if (!sendRes.ok) {
       const eb = await (sendRes.text ? sendRes.text() : Promise.resolve('')).catch(() => '');
       return res.status(502).json({ error: `Falha ao enviar (${sendRes.status}): ${String(eb).slice(0, 150)}` });
@@ -1901,7 +1966,7 @@ app.post('/api/crm/leads/:id/message', requireAuth, async (req, res) => {
       method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ last_activity: new Date().toISOString() }),
     }).catch(() => {});
-    res.json({ ok: true, provider: WA_PROVIDER });
+    res.json({ ok: true, provider });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
@@ -1991,6 +2056,42 @@ app.post('/api/crm/voip-settings', requireAuth, async (req, res) => {
   cfg.voipRamal = (voipRamal || '').trim();
   putUserConfig(req.session.email, cfg);
   res.json({ ok: true });
+});
+
+// ── Uzapi (provedor de WhatsApp alternativo) — credenciais por usuário ──
+app.get('/api/agent/uzapi-settings', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  res.json({
+    ok: true,
+    waProvider: cfg.waProvider || 'evolution',
+    uzapiUsername: cfg.uzapiUsername || '',
+    uzapiPhoneId: cfg.uzapiPhoneId || '',
+    hasToken: !!cfg.uzapiToken, // nunca devolve o token em si
+  });
+});
+app.post('/api/agent/uzapi-settings', requireAuth, async (req, res) => {
+  const { waProvider, uzapiUsername, uzapiPhoneId, uzapiToken } = req.body;
+  const cfg = await getUserConfig(req.session.email);
+  cfg.waProvider = waProvider === 'uzapi' ? 'uzapi' : 'evolution';
+  cfg.uzapiUsername = (uzapiUsername || '').trim();
+  cfg.uzapiPhoneId = (uzapiPhoneId || '').replace(/\D/g, '');
+  // Só sobrescreve o token se um novo foi enviado — permite trocar username/phoneId sem reenviar o token
+  if (uzapiToken && uzapiToken.trim()) cfg.uzapiToken = uzapiToken.trim();
+  if (configIdFor(req.session.email) === 1) agentConfig = cfg;
+  putUserConfig(req.session.email, cfg);
+  res.json({ ok: true });
+});
+// Testa a conexão com a Uzapi usando as credenciais salvas
+app.post('/api/agent/uzapi-test', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  if (!cfg.uzapiToken || !cfg.uzapiUsername || !cfg.uzapiPhoneId) {
+    return res.status(400).json({ error: 'Preencha username, phone number ID e token antes de testar.' });
+  }
+  try {
+    const r = await uzapiInstanceStatus(cfg);
+    if (!r.ok) return res.status(r.status || 502).json({ error: r.raw?.message || `Falha ao consultar a instância (HTTP ${r.status}).` });
+    res.json({ ok: true, status: r.raw });
+  } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
 // Registra uma chamada (feita via click-to-call ou manualmente) e opcionalmente reclassifica o lead
