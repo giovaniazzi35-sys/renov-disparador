@@ -669,6 +669,77 @@
       .step-label { display: none; }
       .media-type-grid { grid-template-columns: repeat(2, 1fr); }
     }
+    /* ══ CRM ══ */
+    #panel-crm { padding-top: 4px; }
+    .crm-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+    .crm-stat { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px 18px; }
+    .crm-stat-val { font-size:24px; font-weight:800; color:var(--text); letter-spacing:-.5px; }
+    .crm-stat-lbl { font-size:12px; color:var(--text-3); margin-top:2px; }
+    .crm-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+    .crm-toolbar input#crm-search { flex:1; min-width:200px; background:var(--card); border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); padding:10px 14px; font-family:inherit; font-size:14px; outline:none; }
+    .crm-toolbar input#crm-search:focus { border-color:var(--accent); }
+    .crm-toolbar-actions { display:flex; gap:8px; }
+    .crm-board { display:flex; gap:12px; overflow-x:auto; padding-bottom:12px; align-items:flex-start; }
+    .crm-col { flex:0 0 260px; background:rgba(255,255,255,.02); border:1px solid var(--border); border-radius:12px; padding:10px; min-height:120px; transition:background .15s, border-color .15s; }
+    .crm-col.drag-over { background:var(--accent-glow); border-color:var(--accent); }
+    .crm-col-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding:2px 4px; }
+    .crm-col-title { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:7px; }
+    .crm-col-dot { width:9px; height:9px; border-radius:99px; }
+    .crm-col-count { font-size:11px; font-weight:700; color:var(--text-3); background:rgba(255,255,255,.05); padding:1px 8px; border-radius:99px; }
+    .crm-card { background:var(--card); border:1px solid var(--border); border-radius:9px; padding:11px 12px; margin-bottom:8px; cursor:grab; transition:border-color .15s, transform .1s; }
+    .crm-card:hover { border-color:var(--accent); }
+    .crm-card:active { cursor:grabbing; }
+    .crm-card.dragging { opacity:.5; }
+    .crm-card-name { font-size:14px; font-weight:700; color:var(--text); margin-bottom:2px; }
+    .crm-card-phone { font-size:12px; color:var(--text-2); }
+    .crm-card-meta { display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:6px; }
+    .crm-card-tags { display:flex; gap:4px; flex-wrap:wrap; }
+    .crm-tag { font-size:10px; font-weight:700; padding:1px 8px; border-radius:99px; background:rgba(45,212,191,.12); color:var(--accent); }
+    .crm-card-val { font-size:11px; font-weight:800; color:#4ade80; white-space:nowrap; }
+    .crm-empty { font-size:12px; color:var(--text-3); text-align:center; padding:14px 4px; }
+    @media (max-width:720px){ .crm-stats{grid-template-columns:repeat(2,1fr);} }
+    .crm-charts { display:grid; grid-template-columns:1.4fr 1fr; gap:14px; margin-bottom:18px; }
+    @media (max-width:820px){ .crm-charts{grid-template-columns:1fr;} }
+    .funnel-row { display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+    .funnel-label { font-size:12px; color:var(--text-2); width:96px; flex:0 0 96px; }
+    .funnel-bar-wrap { flex:1; height:22px; background:rgba(255,255,255,.04); border-radius:6px; overflow:hidden; }
+    .funnel-bar { height:100%; border-radius:6px; transition:width .4s; min-width:2px; }
+    .funnel-count { font-size:12px; font-weight:700; color:var(--text); width:28px; text-align:right; }
+    .donut-legend { display:flex; flex-direction:column; gap:7px; }
+    .donut-leg-item { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--text-2); }
+    .donut-leg-dot { width:9px; height:9px; border-radius:2px; }
+
+    /* ══ Shell: sidebar + topbar (design dashboard) ══ */
+    body { background:#0a0e1a; }
+    .app.shell { max-width:none; margin:0; padding:0; display:flex; min-height:100vh; gap:0; }
+    .sidebar { width:236px; flex:0 0 236px; background:#0d1220; border-right:1px solid var(--border); padding:22px 16px; display:flex; flex-direction:column; gap:6px; position:sticky; top:0; height:100vh; }
+    .sidebar-brand { display:flex; align-items:center; gap:10px; padding:4px 8px 22px; }
+    .sidebar-brand .brand-mark { width:34px; height:34px; }
+    .sidebar-brand .brand-name { font-size:17px; font-weight:800; letter-spacing:-.3px; color:#fff; }
+    .sidebar-brand .brand-name b { color:#3b82f6; }
+    .nav-item { display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:10px; font-size:14px; font-weight:600; color:var(--text-2); cursor:pointer; border:none; background:none; width:100%; text-align:left; font-family:inherit; transition:background .15s, color .15s; }
+    .nav-item:hover { color:var(--text); background:rgba(255,255,255,.03); }
+    .nav-item.active { background:#1a2236; color:#fff; }
+    .nav-item .nav-ico { font-size:16px; width:20px; text-align:center; }
+    .sidebar-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-3); padding:18px 14px 8px; }
+    .sidebar-spacer { flex:1; }
+    .sidebar-user { display:flex; align-items:center; gap:10px; padding:12px 10px; border-top:1px solid var(--border); margin-top:8px; }
+    .sidebar-user img { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); }
+    .sidebar-user .su-name { font-size:13px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px; }
+    .sidebar-user .su-mail { font-size:11px; color:var(--text-3); }
+    .main-area { flex:1; min-width:0; padding:24px 30px 40px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:26px; }
+    .topbar h1 { font-size:24px; font-weight:800; letter-spacing:-.4px; }
+    .topbar-actions { display:flex; align-items:center; gap:12px; }
+    .topbar-icon { width:40px; height:40px; border-radius:12px; background:var(--card); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-2); font-size:17px; }
+    .topbar-icon:hover { color:var(--text); border-color:var(--accent); }
+    .topbar-avatar { width:40px; height:40px; border-radius:50%; border:1px solid var(--border); object-fit:cover; }
+    @media (max-width:860px){
+      .app.shell { flex-direction:column; }
+      .sidebar { width:auto; flex:none; height:auto; position:relative; flex-direction:row; flex-wrap:wrap; overflow-x:auto; }
+      .sidebar-spacer,.sidebar-label,.sidebar-user { display:none; }
+      .main-area { padding:18px; }
+    }
   </style>
   <!-- PDF.js para extração de texto do documento de treinamento -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -683,65 +754,143 @@
   <div class="blob blob-3"></div>
 </div>
 
-<div class="app">
+<div class="app shell">
 
-  <!-- HEADER -->
-  <header class="app-header">
-    <!-- Logo DOIT SEND -->
-    <div class="header-logo">
-      <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="ds-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#3b82f6"/>
-            <stop offset="1" stop-color="#1e3a8a"/>
-          </linearGradient>
-        </defs>
-        <!-- Linhas de velocidade -->
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <svg class="brand-mark" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="ds-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient></defs>
         <circle cx="10" cy="40" r="3" fill="url(#ds-grad)"/>
         <rect x="6" y="30" width="16" height="4.5" rx="2.25" fill="url(#ds-grad)"/>
         <rect x="6" y="45.5" width="16" height="4.5" rx="2.25" fill="url(#ds-grad)"/>
-        <!-- "D" -->
-        <path d="M30 16 h14 a24 24 0 0 1 0 48 h-14 a3 3 0 0 1 -3 -3 V19 a3 3 0 0 1 3 -3 z
-                 M37 26 V54 h7 a14 14 0 0 0 0 -28 z" fill="url(#ds-grad)" fill-rule="evenodd"/>
-        <!-- Seta -->
+        <path d="M30 16 h14 a24 24 0 0 1 0 48 h-14 a3 3 0 0 1 -3 -3 V19 a3 3 0 0 1 3 -3 z M37 26 V54 h7 a14 14 0 0 0 0 -28 z" fill="url(#ds-grad)" fill-rule="evenodd"/>
         <path d="M20 40 h22 l-8 -8 h9 l11 8 -11 8 h-9 l8 -8 z" fill="url(#ds-grad)"/>
       </svg>
+      <span class="brand-name">DOIT <b>SEND</b></span>
     </div>
-    <div class="header-text">
-      <h1>DOIT SEND</h1>
-      <p>Disparos em massa com inteligência</p>
-    </div>
-    <div class="header-actions">
-      <span id="user-badge" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--text-2);margin-right:4px">
-        <img id="user-pic" src="" alt="" style="width:26px;height:26px;border-radius:50%;display:none;border:1px solid var(--border)" />
-        <span id="user-name"></span>
-      </span>
-      <form action="/logout" method="POST" style="display:inline">
-        <button type="submit" class="btn-logout">Sair</button>
-      </form>
-    </div>
-  </header>
-  <script>
-    // Mostra a conta Google logada no cabeçalho
-    fetch('/api/me').then(r => r.json()).then(j => {
-      if (!j.ok) return;
-      const badge = document.getElementById('user-badge');
-      document.getElementById('user-name').textContent = j.name || j.email;
-      if (j.picture) { const p = document.getElementById('user-pic'); p.src = j.picture; p.style.display = 'block'; }
-      badge.style.display = 'flex';
-    }).catch(() => {});
-  </script>
 
-  <div id="banner-container"></div>
+    <button class="nav-item active" id="tab-crm"><span class="nav-ico">▦</span> Dashboard</button>
+    <button class="nav-item" id="tab-disparador"><span class="nav-ico">📤</span> Disparador</button>
+    <button class="nav-item" id="tab-agente"><span class="nav-ico">🤖</span> Agente IA</button>
 
-  <!-- ABAS PRINCIPAIS -->
-  <div class="main-tabs">
-    <button class="main-tab active" id="tab-disparador">📤 Disparador</button>
-    <button class="main-tab" id="tab-agente">🤖 Agente IA</button>
+    <div class="sidebar-label">Outros</div>
+    <a class="nav-item" href="https://129.121.54.221" target="_blank" rel="noopener"><span class="nav-ico">🔌</span> Painel Evolution</a>
+
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-user">
+      <img id="user-pic" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' rx='16' fill='%231a2236'/%3E%3C/svg%3E" alt="" />
+      <div style="flex:1;min-width:0">
+        <div class="su-name" id="user-name">—</div>
+        <div class="su-mail" id="user-mail"></div>
+      </div>
+      <form action="/logout" method="POST" style="display:inline"><button type="submit" class="btn-icon" title="Sair" style="font-size:15px">⏻</button></form>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-area">
+    <div class="topbar">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="topbar-actions">
+        <div class="topbar-icon" id="topbar-search-btn" title="Buscar">🔍</div>
+        <div class="topbar-icon" title="Notificações">🔔</div>
+        <img class="topbar-avatar" id="topbar-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' rx='20' fill='%231a2236'/%3E%3C/svg%3E" alt="" />
+      </div>
+    </div>
+
+    <script>
+      // Preenche usuário logado na sidebar/topbar
+      fetch('/api/me').then(r => r.json()).then(j => {
+        if (!j.ok) return;
+        document.getElementById('user-name').textContent = j.name || j.email;
+        document.getElementById('user-mail').textContent = j.email || '';
+        if (j.picture) { document.getElementById('user-pic').src = j.picture; document.getElementById('topbar-avatar').src = j.picture; }
+      }).catch(() => {});
+    </script>
+
+    <div id="banner-container"></div>
+
+  <!-- ═══ PAINEL CRM ═══════════════════════════════════════════ -->
+  <div id="panel-crm">
+
+    <!-- Cards de resumo -->
+    <div class="crm-stats" id="crm-stats">
+      <div class="crm-stat"><div class="crm-stat-val" id="crm-total">—</div><div class="crm-stat-lbl">Leads totais</div></div>
+      <div class="crm-stat"><div class="crm-stat-val" id="crm-pipeline">—</div><div class="crm-stat-lbl">Em negociação</div></div>
+      <div class="crm-stat"><div class="crm-stat-val" id="crm-ganhos">—</div><div class="crm-stat-lbl">Ganhos</div></div>
+      <div class="crm-stat"><div class="crm-stat-val" id="crm-valor">—</div><div class="crm-stat-lbl">Valor ganho</div></div>
+    </div>
+
+    <!-- Gráfico de distribuição por etapa -->
+    <div class="crm-charts">
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="font-size:15px">Funil de vendas</div>
+        <div class="card-sub" style="margin-bottom:14px">Leads por etapa do pipeline</div>
+        <div id="crm-funnel"></div>
+      </div>
+      <div class="card" style="padding:20px;display:flex;flex-direction:column">
+        <div class="card-title" style="font-size:15px">Distribuição</div>
+        <div class="card-sub" style="margin-bottom:6px">Proporção por etapa</div>
+        <div id="crm-donut" style="display:flex;align-items:center;gap:18px;flex:1;justify-content:center"></div>
+      </div>
+    </div>
+
+    <!-- Barra de ações -->
+    <div class="crm-toolbar">
+      <input type="text" id="crm-search" placeholder="🔍 Buscar por nome ou telefone..." />
+      <div class="crm-toolbar-actions">
+        <button class="btn-ghost btn-sm" id="btn-crm-import" title="Importar leads das conversas do Agente IA">⇩ Importar do Agente</button>
+        <button class="btn-ghost btn-sm" id="btn-crm-refresh">↺</button>
+        <button class="btn-primary btn-sm" id="btn-crm-add">＋ Novo lead</button>
+      </div>
+    </div>
+
+    <!-- Pipeline Kanban -->
+    <div class="crm-board" id="crm-board"></div>
+
+  </div><!-- /panel-crm -->
+
+  <!-- Modal de lead -->
+  <div class="modal-overlay hidden" id="crm-lead-modal">
+    <div class="modal-box" style="max-width:560px;text-align:left">
+      <div class="row-between" style="margin-bottom:16px">
+        <div class="modal-title" style="margin:0" id="crm-modal-title">Novo lead</div>
+        <button class="btn-icon" id="crm-modal-close" style="font-size:18px">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field" style="margin:0"><label class="field-label">Nome</label><input type="text" id="crm-f-name" placeholder="Nome do contato" /></div>
+        <div class="field" style="margin:0"><label class="field-label">Telefone (WhatsApp)</label><input type="text" id="crm-f-phone" placeholder="5511999999999" /></div>
+        <div class="field" style="margin:0"><label class="field-label">Etapa</label>
+          <select id="crm-f-stage"></select>
+        </div>
+        <div class="field" style="margin:0"><label class="field-label">Valor (R$)</label><input type="number" id="crm-f-value" placeholder="0" /></div>
+      </div>
+      <div class="field"><label class="field-label">Etiquetas (separadas por vírgula)</label><input type="text" id="crm-f-tags" placeholder="ótica, rede, indicação" /></div>
+      <div class="field"><label class="field-label">Anotações</label><textarea id="crm-f-notes" rows="4" placeholder="Histórico, contexto, próximos passos..."></textarea></div>
+
+      <!-- Enviar WhatsApp (aparece ao editar lead com telefone) -->
+      <div id="crm-msg-box" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:6px">
+        <label class="field-label">Enviar mensagem no WhatsApp</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="crm-msg-text" placeholder="Digite a mensagem..." style="flex:1" />
+          <button class="btn-primary btn-sm" id="crm-msg-send">Enviar</button>
+        </div>
+        <div id="crm-msg-status" style="font-size:12px;color:var(--text-3);margin-top:6px"></div>
+      </div>
+
+      <div class="row-between" style="margin-top:18px">
+        <button class="btn-ghost btn-sm" id="crm-f-delete" style="color:#f87171;display:none">🗑 Excluir</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn-ghost" id="crm-f-cancel">Cancelar</button>
+          <button class="btn-primary" id="crm-f-save">Salvar</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- PAINEL DISPARADOR -->
-  <div id="panel-disparador">
+  <div id="panel-disparador" class="hidden">
 
   <!-- STEPPER -->
   <div class="stepper" id="stepper">
@@ -1319,6 +1468,7 @@
 
   </div><!-- /panel-agente -->
 
+  </main>
 </div><!-- /app -->
 
 <!-- ═══ MODAL QR / PAIR CODE ════════════════════════════════ -->
@@ -3436,23 +3586,253 @@ const Agent = {
   }
 };
 
+// ============================================================
+// CRM
+// ============================================================
+const CRM = {
+  STAGES: [
+    { key:'novo',        label:'Novo',        color:'#60a5fa' },
+    { key:'contato',     label:'Em conversa', color:'#a78bfa' },
+    { key:'qualificado', label:'Qualificado', color:'#2dd4bf' },
+    { key:'reuniao',     label:'Reunião',     color:'#fbbf24' },
+    { key:'ganho',       label:'Ganho',       color:'#4ade80' },
+    { key:'perdido',     label:'Perdido',     color:'#f87171' },
+  ],
+  leads: [],
+  editingId: null,
+  _loaded: false,
+
+  init() {
+    // Popula o select de etapas do modal
+    const sel = document.getElementById('crm-f-stage');
+    if (sel) sel.innerHTML = this.STAGES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+    const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+    wire('btn-crm-add', () => this.openLead(null));
+    wire('btn-crm-refresh', () => this.load(true));
+    wire('btn-crm-import', () => this.importFromAgent());
+    wire('crm-f-cancel', () => this.closeModal());
+    wire('crm-modal-close', () => this.closeModal());
+    wire('crm-f-save', () => this.save());
+    wire('crm-f-delete', () => this.del());
+    wire('crm-msg-send', () => this.sendMsg());
+    const search = document.getElementById('crm-search');
+    if (search) search.oninput = () => this.renderBoard();
+    const modal = document.getElementById('crm-lead-modal');
+    if (modal) modal.addEventListener('click', e => { if (e.target === modal) this.closeModal(); });
+  },
+
+  async load(force) {
+    if (this._loaded && !force) { this.renderBoard(); return; }
+    try {
+      const [lr, sr] = await Promise.all([
+        fetch('/api/crm/leads').then(r => r.json()),
+        fetch('/api/crm/stats').then(r => r.json()),
+      ]);
+      this.leads = (lr.leads || []);
+      this._loaded = true;
+      this.renderStats(sr.stats || {});
+      this.renderCharts(sr.stats || {});
+      this.renderBoard();
+    } catch (err) {
+      UI.addBanner('error', 'Erro ao carregar CRM: ' + err.message);
+    }
+  },
+
+  renderStats(s) {
+    const brl = v => 'R$ ' + (Number(v)||0).toLocaleString('pt-BR');
+    const byStage = s.byStage || {};
+    const emNeg = (byStage.contato||0) + (byStage.qualificado||0) + (byStage.reuniao||0);
+    document.getElementById('crm-total').textContent = s.total ?? 0;
+    document.getElementById('crm-pipeline').textContent = emNeg;
+    document.getElementById('crm-ganhos').textContent = byStage.ganho || 0;
+    document.getElementById('crm-valor').textContent = brl(s.valorGanho);
+  },
+
+  renderCharts(s) {
+    const byStage = s.byStage || {};
+    const total = this.STAGES.reduce((a, st) => a + (byStage[st.key]||0), 0) || 1;
+    // Funil (barras horizontais)
+    const max = Math.max(1, ...this.STAGES.map(st => byStage[st.key]||0));
+    document.getElementById('crm-funnel').innerHTML = this.STAGES.map(st => {
+      const n = byStage[st.key] || 0;
+      const w = Math.round((n / max) * 100);
+      return `<div class="funnel-row">
+        <span class="funnel-label">${st.label}</span>
+        <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${w}%;background:${st.color}"></div></div>
+        <span class="funnel-count">${n}</span></div>`;
+    }).join('');
+    // Donut (SVG)
+    let acc = 0; const R = 52, C = 2*Math.PI*R; const segs = [];
+    this.STAGES.forEach(st => {
+      const n = byStage[st.key] || 0; if (!n) return;
+      const frac = n/total; const len = frac*C;
+      segs.push(`<circle r="${R}" cx="70" cy="70" fill="none" stroke="${st.color}" stroke-width="18" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 70 70)"/>`);
+      acc += len;
+    });
+    const legend = this.STAGES.filter(st => byStage[st.key]).map(st =>
+      `<div class="donut-leg-item"><span class="donut-leg-dot" style="background:${st.color}"></span>${st.label} <b style="color:var(--text);margin-left:auto">${byStage[st.key]}</b></div>`).join('');
+    document.getElementById('crm-donut').innerHTML = `
+      <svg width="140" height="140" viewBox="0 0 140 140">${segs.join('') || `<circle r="52" cx="70" cy="70" fill="none" stroke="#1a2236" stroke-width="18"/>`}
+        <text x="70" y="66" text-anchor="middle" fill="#fff" font-size="24" font-weight="800">${s.total||0}</text>
+        <text x="70" y="84" text-anchor="middle" fill="#94a3b8" font-size="10">leads</text></svg>
+      <div class="donut-legend">${legend || '<span style="color:var(--text-3);font-size:12px">Sem dados</span>'}</div>`;
+  },
+
+  renderBoard() {
+    const board = document.getElementById('crm-board');
+    if (!board) return;
+    const q = (document.getElementById('crm-search')?.value || '').toLowerCase().trim();
+    const filtered = q ? this.leads.filter(l => (l.name||'').toLowerCase().includes(q) || (l.phone||'').includes(q)) : this.leads;
+    board.innerHTML = '';
+    this.STAGES.forEach(st => {
+      const items = filtered.filter(l => l.stage === st.key);
+      const col = document.createElement('div');
+      col.className = 'crm-col'; col.dataset.stage = st.key;
+      col.innerHTML = `<div class="crm-col-head">
+          <span class="crm-col-title"><span class="crm-col-dot" style="background:${st.color}"></span>${st.label}</span>
+          <span class="crm-col-count">${items.length}</span></div>`;
+      items.forEach(l => col.appendChild(this._card(l)));
+      if (!items.length) { const e = document.createElement('div'); e.className='crm-empty'; e.textContent='—'; col.appendChild(e); }
+      // Drag & drop
+      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
+      col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+      col.addEventListener('drop', e => {
+        e.preventDefault(); col.classList.remove('drag-over');
+        const id = e.dataTransfer.getData('text/id');
+        this.moveStage(id, st.key);
+      });
+      board.appendChild(col);
+    });
+  },
+
+  _card(l) {
+    const c = document.createElement('div');
+    c.className = 'crm-card'; c.draggable = true;
+    const tags = (l.tags||[]).slice(0,3).map(t => `<span class="crm-tag">${esc(t)}</span>`).join('');
+    const val = Number(l.value)>0 ? `<span class="crm-card-val">R$ ${Number(l.value).toLocaleString('pt-BR')}</span>` : '';
+    c.innerHTML = `<div class="crm-card-name">${esc(l.name || l.phone || 'Sem nome')}</div>
+      ${l.phone ? `<div class="crm-card-phone">📱 ${esc(l.phone)}</div>` : ''}
+      <div class="crm-card-meta"><div class="crm-card-tags">${tags}</div>${val}</div>`;
+    c.addEventListener('dragstart', e => { e.dataTransfer.setData('text/id', l.id); c.classList.add('dragging'); });
+    c.addEventListener('dragend', () => c.classList.remove('dragging'));
+    c.addEventListener('click', () => this.openLead(l));
+    return c;
+  },
+
+  async moveStage(id, stage) {
+    const lead = this.leads.find(l => l.id === id);
+    if (!lead || lead.stage === stage) return;
+    lead.stage = stage; this.renderBoard();
+    try {
+      await fetch('/api/crm/leads/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ stage }) });
+      this.refreshStats();
+    } catch (_) { UI.addBanner('error', 'Erro ao mover lead'); }
+  },
+
+  async refreshStats() {
+    try { const sr = await fetch('/api/crm/stats').then(r=>r.json()); this.renderStats(sr.stats||{}); this.renderCharts(sr.stats||{}); } catch(_){}
+  },
+
+  openLead(l) {
+    this.editingId = l ? l.id : null;
+    document.getElementById('crm-modal-title').textContent = l ? 'Editar lead' : 'Novo lead';
+    document.getElementById('crm-f-name').value = l?.name || '';
+    document.getElementById('crm-f-phone').value = l?.phone || '';
+    document.getElementById('crm-f-stage').value = l?.stage || 'novo';
+    document.getElementById('crm-f-value').value = l?.value || '';
+    document.getElementById('crm-f-tags').value = (l?.tags||[]).join(', ');
+    document.getElementById('crm-f-notes').value = l?.notes || '';
+    document.getElementById('crm-f-delete').style.display = l ? '' : 'none';
+    const msgBox = document.getElementById('crm-msg-box');
+    msgBox.style.display = (l && l.phone) ? 'block' : 'none';
+    document.getElementById('crm-msg-text').value = '';
+    document.getElementById('crm-msg-status').textContent = '';
+    document.getElementById('crm-lead-modal').classList.remove('hidden');
+  },
+  closeModal() { document.getElementById('crm-lead-modal').classList.add('hidden'); },
+
+  async save() {
+    const body = {
+      name: document.getElementById('crm-f-name').value.trim(),
+      phone: document.getElementById('crm-f-phone').value.trim(),
+      stage: document.getElementById('crm-f-stage').value,
+      value: parseFloat(document.getElementById('crm-f-value').value) || 0,
+      tags: document.getElementById('crm-f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      notes: document.getElementById('crm-f-notes').value,
+    };
+    if (!body.name && !body.phone) { UI.addBanner('warning','Informe ao menos nome ou telefone.'); return; }
+    const btn = document.getElementById('crm-f-save'); btn.disabled = true; btn.textContent = 'Salvando...';
+    try {
+      const url = this.editingId ? '/api/crm/leads/' + this.editingId : '/api/crm/leads';
+      const method = this.editingId ? 'PATCH' : 'POST';
+      const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erro');
+      this.closeModal();
+      await this.load(true);
+      UI.addBanner('info', this.editingId ? '✓ Lead atualizado' : '✓ Lead criado');
+    } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Salvar'; }
+  },
+
+  async del() {
+    if (!this.editingId || !confirm('Excluir este lead?')) return;
+    try {
+      await fetch('/api/crm/leads/' + this.editingId, { method:'DELETE' });
+      this.closeModal(); await this.load(true);
+      UI.addBanner('info', 'Lead excluído');
+    } catch (err) { UI.addBanner('error', 'Erro ao excluir'); }
+  },
+
+  async importFromAgent() {
+    const btn = document.getElementById('btn-crm-import'); btn.disabled = true; btn.textContent = 'Importando...';
+    try {
+      const r = await fetch('/api/crm/import-conversations', { method:'POST' });
+      const j = await r.json();
+      await this.load(true);
+      UI.addBanner('info', j.imported ? `✓ ${j.imported} lead(s) importado(s) do Agente IA` : 'Nenhum lead novo para importar');
+    } catch (err) { UI.addBanner('error', 'Erro ao importar: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = '⇩ Importar do Agente'; }
+  },
+
+  async sendMsg() {
+    if (!this.editingId) return;
+    const text = document.getElementById('crm-msg-text').value.trim();
+    const status = document.getElementById('crm-msg-status');
+    if (!text) { status.textContent = 'Digite uma mensagem.'; return; }
+    const btn = document.getElementById('crm-msg-send'); btn.disabled = true; btn.textContent = '...';
+    status.textContent = 'Enviando...';
+    try {
+      const r = await fetch('/api/crm/leads/' + this.editingId + '/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erro');
+      status.style.color = '#4ade80'; status.textContent = '✓ Mensagem enviada!';
+      document.getElementById('crm-msg-text').value = '';
+    } catch (err) { status.style.color = '#f87171'; status.textContent = '✗ ' + err.message; }
+    finally { btn.disabled = false; btn.textContent = 'Enviar'; }
+  },
+};
+
 // Troca de abas
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('tab-disparador').onclick = () => {
-    document.getElementById('panel-disparador').classList.remove('hidden');
-    document.getElementById('panel-agente').classList.add('hidden');
-    document.getElementById('tab-disparador').classList.add('active');
-    document.getElementById('tab-agente').classList.remove('active');
-  };
+  const panels = { crm:'panel-crm', disparador:'panel-disparador', agente:'panel-agente' };
+  const tabs   = { crm:'tab-crm', disparador:'tab-disparador', agente:'tab-agente' };
+  const titles = { crm:'Dashboard', disparador:'Disparador', agente:'Agente IA' };
+  function showTab(which) {
+    Object.entries(panels).forEach(([k,id]) => document.getElementById(id).classList.toggle('hidden', k !== which));
+    Object.entries(tabs).forEach(([k,id]) => document.getElementById(id).classList.toggle('active', k === which));
+    const t = document.getElementById('page-title'); if (t) t.textContent = titles[which] || '';
+  }
+  document.getElementById('tab-crm').onclick = () => { showTab('crm'); CRM.load(); };
+  document.getElementById('tab-disparador').onclick = () => showTab('disparador');
   document.getElementById('tab-agente').onclick = () => {
-    document.getElementById('panel-agente').classList.remove('hidden');
-    document.getElementById('panel-disparador').classList.add('hidden');
-    document.getElementById('tab-agente').classList.add('active');
-    document.getElementById('tab-disparador').classList.remove('active');
+    showTab('agente');
     Agent.autoProbeKey();
     Agent.loadConversations();
   };
   Agent.init();
+  CRM.init();
+  CRM.load(); // CRM é a aba inicial
 
   // Detecta retorno do OAuth do Google e exibe resultado
   const _qp = new URLSearchParams(window.location.search);

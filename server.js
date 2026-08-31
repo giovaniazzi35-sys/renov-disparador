@@ -20,6 +20,12 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'renov-secret-2026';
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
+// WAHA (WhatsApp HTTP API) — motor alternativo à Evolution. Ativa quando WAHA_URL
+// estiver definido. Basta hospedar o WAHA e configurar estas variáveis no Vercel.
+const WAHA_URL     = (process.env.WAHA_URL || '').replace(/\/$/, '');
+const WAHA_API_KEY = process.env.WAHA_API_KEY || '';
+const WA_PROVIDER  = WAHA_URL ? 'waha' : 'evolution'; // seleção automática
+
 if (!EVOLUTION_URL || EVOLUTION_URL === 'https://SEU_IP_OU_DOMINIO') {
   console.error('\n  ❌  EVOLUTION_URL não configurada! Edite o arquivo .env.\n');
   process.exit(1);
@@ -253,6 +259,65 @@ function translateEvolutionError(status, body) {
     return 'INSTANCIA_DESCONECTADA: Instância desconectada — reconecte o WhatsApp';
 
   return body.error || body.message || body.response?.message || `Erro ${status}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Camada WhatsApp unificada — roteia para WAHA ou Evolution
+// ══════════════════════════════════════════════════════════════
+// Quando WAHA_URL estiver configurado, todo envio passa pelo WAHA.
+// Session (WAHA) = instanceName; chatId = <numero>@c.us
+function wahaChatId(phone) {
+  const n = String(phone).replace(/\D/g, '');
+  return `${n}@c.us`;
+}
+
+// Envia texto via WAHA
+async function wahaSendText(session, phone, text) {
+  return proxyFetch(`${WAHA_URL}/api/sendText`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': WAHA_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session: session || 'default', chatId: wahaChatId(phone), text }),
+  });
+}
+
+// Envia mídia via WAHA (imagem/arquivo/vídeo/voz) — data base64 ou url
+async function wahaSendMedia(session, phone, { type, url, base64, mimetype, caption, filename }) {
+  const chatId = wahaChatId(phone);
+  const s = session || 'default';
+  const file = url ? { url } : { mimetype: mimetype || 'application/octet-stream', filename: filename || 'arquivo', data: (base64 || '').replace(/^data:[^,]+,/, '') };
+  let endpoint = '/api/sendFile', payloadKey = 'file';
+  if (type === 'image') endpoint = '/api/sendImage';
+  else if (type === 'video') endpoint = '/api/sendVideo';
+  else if (type === 'audio') { endpoint = '/api/sendVoice'; }
+  const body = { session: s, chatId, caption: caption || '' };
+  body[payloadKey] = file;
+  return proxyFetch(`${WAHA_URL}${endpoint}`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': WAHA_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+// Status da sessão WAHA (WORKING/SCAN_QR_CODE/STARTING/FAILED)
+async function wahaSessionStatus(session) {
+  const r = await proxyFetch(`${WAHA_URL}/api/sessions/${encodeURIComponent(session || 'default')}`, {
+    method: 'GET', headers: { 'X-Api-Key': WAHA_API_KEY },
+  });
+  const d = await r.json().catch(() => ({}));
+  return { raw: d, connected: (d.status === 'WORKING'), status: d.status };
+}
+
+// ENVIO UNIFICADO — usado pelo agente e pelo CRM. Roteia automaticamente.
+// `wa` = { session|instanceName, instanceToken } (token só usado no Evolution)
+async function waSendText(wa, phone, text) {
+  if (WA_PROVIDER === 'waha') {
+    const r = await wahaSendText(wa.session || wa.instanceName, phone, text);
+    return { ok: r.ok, status: r.status, text: () => r.text() };
+  }
+  return proxyFetch(`${EVOLUTION_URL}/send/text`, {
+    method: 'POST', headers: { apikey: wa.instanceToken },
+    body: JSON.stringify({ number: String(phone).replace(/\D/g, ''), text, delay: wa.delay || 0 }),
+  });
 }
 
 // ── API ──────────────────────────────────────────────────────
@@ -1662,6 +1727,176 @@ app.delete('/api/agent/conversation/:phone', requireAuth, async (req, res) => {
     } catch (err) { console.warn('conversation delete error:', err.message); }
   }
   res.json({ ok: true });
+});
+
+// ══════════════════════════════════════════════════════════════
+// CRM — leads / pipeline (por usuário)
+// ══════════════════════════════════════════════════════════════
+const CRM_STAGES = ['novo', 'contato', 'qualificado', 'reuniao', 'ganho', 'perdido'];
+
+// Mapeia o status do agente IA para uma etapa do CRM
+function agentStatusToStage(status) {
+  switch ((status || '').toLowerCase()) {
+    case 'potencial':      return 'qualificado';
+    case 'agencia':        return 'perdido';
+    case 'desqualificado': return 'perdido';
+    default:               return 'contato';
+  }
+}
+
+// Lista todos os leads do usuário
+app.get('/api/crm/leads', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, leads: [] });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${owner}&select=*&order=last_activity.desc&limit=500`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    res.json({ ok: true, leads: Array.isArray(rows) ? rows : [] });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Cria um lead
+app.post('/api/crm/leads', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const { name, phone, stage, tags, notes, value, source } = req.body;
+  const lead = {
+    owner: req.session.email,
+    name: (name || '').trim(),
+    phone: (phone || '').replace(/\D/g, ''),
+    stage: CRM_STAGES.includes(stage) ? stage : 'novo',
+    tags: Array.isArray(tags) ? tags : [],
+    notes: notes || '',
+    value: Number(value) || 0,
+    source: source || 'manual',
+    last_activity: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads`, {
+      method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify(lead),
+    });
+    const rows = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: rows?.message || 'Erro ao criar lead' });
+    res.json({ ok: true, lead: Array.isArray(rows) ? rows[0] : rows });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Atualiza um lead (etapa, nome, tags, notas, valor…)
+app.patch('/api/crm/leads/:id', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const id = req.params.id;
+  const allowed = ['name', 'phone', 'stage', 'tags', 'notes', 'value', 'source'];
+  const patch = { updated_at: new Date().toISOString(), last_activity: new Date().toISOString() };
+  for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
+  if (patch.phone !== undefined) patch.phone = String(patch.phone).replace(/\D/g, '');
+  if (patch.stage !== undefined && !CRM_STAGES.includes(patch.stage)) delete patch.stage;
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?id=eq.${id}&owner=eq.${owner}`, {
+      method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify(patch),
+    });
+    const rows = await r.json();
+    res.json({ ok: true, lead: Array.isArray(rows) ? rows[0] : rows });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Exclui um lead
+app.delete('/api/crm/leads/:id', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?id=eq.${req.params.id}&owner=eq.${owner}`, { method: 'DELETE', headers: SB_HEADERS });
+    res.json({ ok: true });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Importa leads a partir das conversas do Agente IA (mapeia status → etapa)
+app.post('/api/crm/import-conversations', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  try {
+    const email = req.session.email;
+    const prefix = convPrefixFor(email);
+    const filter = prefix ? `phone=like.${encodeURIComponent(prefix + '*')}` : `phone=not.like.${encodeURIComponent('*:*')}`;
+    const cr = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_conversations?select=phone,messages,status,updated_at&${filter}&limit=500`, { method: 'GET', headers: SB_HEADERS });
+    const convs = await cr.json();
+    if (!Array.isArray(convs) || !convs.length) return res.json({ ok: true, imported: 0 });
+
+    // Leads já existentes (por telefone) para não duplicar
+    const owner = encodeURIComponent(email);
+    const lr = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${owner}&select=phone`, { method: 'GET', headers: SB_HEADERS });
+    const existing = new Set((await lr.json() || []).map(l => l.phone));
+
+    const stripPrefix = (p) => prefix ? p.slice(prefix.length) : p;
+    const novos = [];
+    for (const c of convs) {
+      const phone = stripPrefix(c.phone);
+      if (!phone || existing.has(phone)) continue;
+      const msgs = Array.isArray(c.messages) ? c.messages : [];
+      const firstUser = msgs.find(m => m.role === 'user')?.content || '';
+      const tags = c.status === 'agencia' ? ['tem-agência'] : [];
+      novos.push({
+        owner: email, phone, name: '', stage: agentStatusToStage(c.status),
+        tags, notes: firstUser ? `Primeira mensagem: "${firstUser.slice(0, 200)}"` : '',
+        value: 0, source: 'agente-ia',
+        last_activity: c.updated_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    if (!novos.length) return res.json({ ok: true, imported: 0 });
+    const ins = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads`, {
+      method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal,resolution=ignore-duplicates' },
+      body: JSON.stringify(novos),
+    });
+    res.json({ ok: ins.ok, imported: novos.length });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Envia uma mensagem de texto para um lead (WhatsApp) e registra a atividade
+app.post('/api/crm/leads/:id/message', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const { text } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const lr = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?id=eq.${req.params.id}&owner=eq.${owner}&select=phone`, { method: 'GET', headers: SB_HEADERS });
+    const lead = (await lr.json() || [])[0];
+    if (!lead || !lead.phone) return res.status(400).json({ error: 'Lead sem telefone.' });
+
+    const cfg = await getUserConfig(req.session.email);
+    if (WA_PROVIDER === 'evolution' && !cfg.instanceToken) return res.status(400).json({ error: 'Conecte uma instância de WhatsApp antes de enviar.' });
+
+    const sendRes = await waSendText({ instanceToken: cfg.instanceToken, session: cfg.instanceName, delay: 0 }, lead.phone, text.trim());
+    if (!sendRes.ok) {
+      const eb = await (sendRes.text ? sendRes.text() : Promise.resolve('')).catch(() => '');
+      return res.status(502).json({ error: `Falha ao enviar (${sendRes.status}): ${String(eb).slice(0, 150)}` });
+    }
+    // Atualiza última atividade
+    await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?id=eq.${req.params.id}&owner=eq.${owner}`, {
+      method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ last_activity: new Date().toISOString() }),
+    }).catch(() => {});
+    res.json({ ok: true, provider: WA_PROVIDER });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Estatísticas do dashboard
+app.get('/api/crm/stats', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, stats: {} });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${owner}&select=stage,value`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    const byStage = {}; let total = 0, valorGanho = 0, valorPipeline = 0;
+    CRM_STAGES.forEach(s => byStage[s] = 0);
+    (Array.isArray(rows) ? rows : []).forEach(l => {
+      byStage[l.stage] = (byStage[l.stage] || 0) + 1; total++;
+      if (l.stage === 'ganho') valorGanho += Number(l.value) || 0;
+      else if (l.stage !== 'perdido') valorPipeline += Number(l.value) || 0;
+    });
+    res.json({ ok: true, stats: { total, byStage, valorGanho, valorPipeline } });
+  } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
 // ── Inicia servidor (apenas localmente — Vercel usa module.exports) ──
