@@ -1970,6 +1970,88 @@ app.get('/api/crm/priorities', requireAuth, async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════
+// LIGAÇÕES — click-to-call (VoIP do Brasil) + registro manual
+// ══════════════════════════════════════════════════════════════
+const CALL_OUTCOMES = ['atendida', 'nao_atendida', 'caixa_postal', 'numero_errado', 'ocupado'];
+
+// Config de discagem do usuário: URL de integração (com {numero}) + ramal
+app.get('/api/crm/voip-settings', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  res.json({ ok: true, voipIntegrationUrl: cfg.voipIntegrationUrl || '', voipRamal: cfg.voipRamal || '' });
+});
+app.post('/api/crm/voip-settings', requireAuth, async (req, res) => {
+  const { voipIntegrationUrl, voipRamal } = req.body;
+  const cfg = await getUserConfig(req.session.email);
+  cfg.voipIntegrationUrl = (voipIntegrationUrl || '').trim();
+  cfg.voipRamal = (voipRamal || '').trim();
+  putUserConfig(req.session.email, cfg);
+  res.json({ ok: true });
+});
+
+// Registra uma chamada (feita via click-to-call ou manualmente) e opcionalmente reclassifica o lead
+app.post('/api/crm/calls', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const { lead_id, phone, lead_name, outcome, duration_sec, notes, new_stage } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Telefone obrigatório.' });
+  const call = {
+    owner: req.session.email,
+    lead_id: lead_id || null,
+    phone: String(phone).replace(/\D/g, ''),
+    lead_name: lead_name || '',
+    outcome: CALL_OUTCOMES.includes(outcome) ? outcome : 'atendida',
+    duration_sec: Number(duration_sec) || 0,
+    notes: notes || '',
+  };
+  try {
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_calls`, {
+      method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify(call),
+    });
+    const rows = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: rows?.message || 'Erro ao registrar chamada' });
+
+    // Reclassifica o lead se solicitado (classificação a partir da ligação)
+    if (lead_id && new_stage && CRM_STAGES.includes(new_stage)) {
+      const owner = encodeURIComponent(req.session.email);
+      await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?id=eq.${lead_id}&owner=eq.${owner}`, {
+        method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ stage: new_stage, last_activity: new Date().toISOString(), updated_at: new Date().toISOString(), ...(new_stage === 'ganho' ? { won_at: new Date().toISOString() } : {}) }),
+      }).catch(() => {});
+    }
+    res.json({ ok: true, call: Array.isArray(rows) ? rows[0] : rows });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Lista chamadas recentes (com filtro opcional por lead)
+app.get('/api/crm/calls', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, calls: [] });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    let url = `${SUPABASE_URL}/rest/v1/crm_calls?owner=eq.${owner}&select=*&order=created_at.desc&limit=200`;
+    if (req.query.lead_id) url += `&lead_id=eq.${encodeURIComponent(req.query.lead_id)}`;
+    const r = await proxyFetch(url, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    res.json({ ok: true, calls: Array.isArray(rows) ? rows : [] });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Estatísticas de chamadas (para o topo da aba Ligações)
+app.get('/api/crm/calls/stats', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.json({ ok: true, stats: {} });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const since = new Date(); since.setHours(0,0,0,0);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_calls?owner=eq.${owner}&select=outcome,duration_sec,created_at&created_at=gte.${since.toISOString()}`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    const arr = Array.isArray(rows) ? rows : [];
+    const total = arr.length;
+    const atendidas = arr.filter(c => c.outcome === 'atendida').length;
+    const tempoTotal = arr.reduce((a, c) => a + (Number(c.duration_sec)||0), 0);
+    res.json({ ok: true, stats: { total, atendidas, taxaAtendimento: total ? Math.round((atendidas/total)*100) : 0, tempoTotal } });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 // ── Inicia servidor (apenas localmente — Vercel usa module.exports) ──
 if (require.main === module) {
   app.listen(PORT, () => {

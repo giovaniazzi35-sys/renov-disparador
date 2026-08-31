@@ -697,6 +697,7 @@
     .crm-table tr:hover td { background:rgba(255,255,255,.02); }
     .crm-table tr { cursor:pointer; }
     .crm-stage-pill { font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px; display:inline-block; }
+    .call-outcome-pill { font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px; display:inline-block; }
     .crm-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
     .crm-toolbar input#crm-search { flex:1; min-width:200px; background:var(--card); border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); padding:10px 14px; font-family:inherit; font-size:14px; outline:none; }
     .crm-toolbar input#crm-search:focus { border-color:var(--accent); }
@@ -796,6 +797,7 @@
     <button class="nav-item active" id="tab-crm" data-crmview="overview"><span class="nav-ico">▦</span> Visão geral</button>
     <button class="nav-item" id="tab-crm-pipeline" data-crmview="pipeline"><span class="nav-ico">⑃</span> Pipeline</button>
     <button class="nav-item" id="tab-crm-leads" data-crmview="leads"><span class="nav-ico">☰</span> Todos os leads</button>
+    <button class="nav-item" id="tab-calls"><span class="nav-ico">📞</span> Ligações</button>
     <button class="nav-item" id="tab-disparador"><span class="nav-ico">📤</span> Disparador</button>
     <button class="nav-item" id="tab-agente"><span class="nav-ico">🤖</span> WhatsApp / Agente</button>
 
@@ -902,6 +904,75 @@
 
   </div><!-- /panel-crm -->
 
+  <!-- ═══ PAINEL LIGAÇÕES ═══════════════════════════════════════ -->
+  <div id="panel-calls" class="hidden">
+
+    <div class="crm-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="crm-stat"><div class="crm-stat-ico">📞</div><div class="crm-stat-val" id="calls-total">—</div><div class="crm-stat-lbl">Ligações hoje</div></div>
+      <div class="crm-stat"><div class="crm-stat-ico">✅</div><div class="crm-stat-val" id="calls-taxa">—</div><div class="crm-stat-lbl">Taxa de atendimento</div></div>
+      <div class="crm-stat"><div class="crm-stat-ico">⏱</div><div class="crm-stat-val" id="calls-tempo">—</div><div class="crm-stat-lbl">Tempo total em ligação</div></div>
+    </div>
+
+    <!-- Config de discagem VoIP do Brasil -->
+    <div class="card" style="padding:18px 20px;margin-bottom:18px">
+      <div class="row-between" style="cursor:pointer" id="voip-settings-toggle">
+        <div><div class="card-title" style="font-size:14px">📡 Configurar discagem (Voip do Brasil)</div>
+          <div class="card-sub" id="voip-settings-sub">Cole a URL de integração e o ramal para habilitar o clique-para-ligar.</div></div>
+        <span style="font-size:12px;color:var(--text-3)">▾</span>
+      </div>
+      <div id="voip-settings-fields" style="display:none;margin-top:14px">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+          <div class="field" style="margin:0"><label class="field-label">URL de integração <span style="font-weight:400;color:var(--text-3)">— use {numero} no lugar do telefone a discar</span></label>
+            <input type="text" id="voip-url" placeholder="https://voipdobrasil.com.br/click2call?ramal=SEU_RAMAL&numero={numero}&key=SUA_CHAVE" /></div>
+          <div class="field" style="margin:0"><label class="field-label">Ramal</label><input type="text" id="voip-ramal" placeholder="1001" /></div>
+        </div>
+        <button class="btn-primary btn-sm" id="btn-voip-save" style="margin-top:8px">Salvar</button>
+        <div class="card-sub" style="margin-top:10px">📍 No painel da Voip do Brasil: <b>Integrações → Gerar Chave de Integração</b>. Cole a URL gerada aqui, trocando o número fixo por <code>{numero}</code>.</div>
+      </div>
+    </div>
+
+    <div class="row-between" style="margin-bottom:14px">
+      <div class="card-title" style="margin:0">Histórico de ligações</div>
+      <button class="btn-ghost btn-sm" id="btn-calls-refresh">↺</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto"><table class="crm-table" id="calls-table"></table></div>
+    </div>
+
+  </div><!-- /panel-calls -->
+
+  <!-- Modal de registro de ligação -->
+  <div class="modal-overlay hidden" id="call-log-modal">
+    <div class="modal-box" style="max-width:460px;text-align:left">
+      <div class="row-between" style="margin-bottom:16px">
+        <div class="modal-title" style="margin:0">Registrar ligação</div>
+        <button class="btn-icon" id="call-log-close" style="font-size:18px">✕</button>
+      </div>
+      <div class="card-sub" style="margin-bottom:12px" id="call-log-target">—</div>
+      <div class="field"><label class="field-label">Resultado</label>
+        <select id="call-f-outcome">
+          <option value="atendida">✅ Atendida</option>
+          <option value="nao_atendida">📵 Não atendida</option>
+          <option value="caixa_postal">📨 Caixa postal</option>
+          <option value="numero_errado">🚫 Número errado</option>
+          <option value="ocupado">⏳ Ocupado</option>
+        </select>
+      </div>
+      <div class="field"><label class="field-label">Duração (minutos)</label><input type="number" id="call-f-duration" placeholder="0" min="0" /></div>
+      <div class="field"><label class="field-label">Anotações da ligação</label><textarea id="call-f-notes" rows="3" placeholder="O que foi falado, próximos passos..."></textarea></div>
+      <div class="field" id="call-f-stage-box"><label class="field-label">Classificar lead (opcional)</label>
+        <select id="call-f-stage"><option value="">— Manter etapa atual —</option></select>
+      </div>
+      <div class="row-between" style="margin-top:16px">
+        <div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost" id="call-log-cancel">Cancelar</button>
+          <button class="btn-primary" id="call-log-save">Salvar registro</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de lead -->
   <div class="modal-overlay hidden" id="crm-lead-modal">
     <div class="modal-box" style="max-width:560px;text-align:left">
@@ -921,8 +992,12 @@
       <div class="field"><label class="field-label">Etiquetas (separadas por vírgula)</label><input type="text" id="crm-f-tags" placeholder="ótica, rede, indicação" /></div>
       <div class="field"><label class="field-label">Anotações</label><textarea id="crm-f-notes" rows="3" placeholder="Histórico, contexto, próximos passos..."></textarea></div>
 
-      <!-- Enviar WhatsApp (aparece ao editar lead com telefone) -->
+      <!-- Ligar + Enviar WhatsApp (aparece ao editar lead com telefone) -->
       <div id="crm-msg-box" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:6px">
+        <div class="row-between" style="margin-bottom:12px">
+          <label class="field-label" style="margin:0">Ações rápidas</label>
+          <button class="btn-primary btn-sm" id="crm-call-btn">📞 Ligar</button>
+        </div>
         <label class="field-label">Enviar mensagem no WhatsApp</label>
         <div style="display:flex;gap:8px">
           <input type="text" id="crm-msg-text" placeholder="Digite a mensagem..." style="flex:1" />
@@ -3914,17 +3989,147 @@ const CRM = {
   },
 };
 
+// ============================================================
+// CALLS — clique-para-ligar (Voip do Brasil) + registro manual
+// ============================================================
+const Calls = {
+  OUTCOMES: {
+    atendida:       { label:'✅ Atendida',       color:'#4ade80' },
+    nao_atendida:   { label:'📵 Não atendida',   color:'#f87171' },
+    caixa_postal:   { label:'📨 Caixa postal',   color:'#fbbf24' },
+    numero_errado:  { label:'🚫 Número errado',  color:'#f87171' },
+    ocupado:        { label:'⏳ Ocupado',        color:'#fbbf24' },
+  },
+  pending: null, // { leadId, phone, leadName } aguardando registro após discar
+  settings: { voipIntegrationUrl:'', voipRamal:'' },
+
+  init() {
+    const stageSel = document.getElementById('call-f-stage');
+    if (stageSel) CRM.STAGES.forEach(s => { const o=document.createElement('option'); o.value=s.key; o.textContent=s.label; stageSel.appendChild(o); });
+    const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+    wire('voip-settings-toggle', () => {
+      const box = document.getElementById('voip-settings-fields');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    });
+    wire('btn-voip-save', () => this.saveSettings());
+    wire('btn-calls-refresh', () => this.load());
+    wire('crm-call-btn', () => this.startCall(CRM.editingId, document.getElementById('crm-f-phone').value.trim(), document.getElementById('crm-f-name').value.trim() || document.getElementById('crm-f-company').value.trim()));
+    wire('call-log-close', () => this.closeLogModal());
+    wire('call-log-cancel', () => this.closeLogModal());
+    wire('call-log-save', () => this.saveLog());
+    this.loadSettings();
+  },
+
+  async loadSettings() {
+    try {
+      const j = await fetch('/api/crm/voip-settings').then(r => r.json());
+      this.settings.voipIntegrationUrl = j.voipIntegrationUrl || '';
+      this.settings.voipRamal = j.voipRamal || '';
+      document.getElementById('voip-url').value = this.settings.voipIntegrationUrl;
+      document.getElementById('voip-ramal').value = this.settings.voipRamal;
+      const sub = document.getElementById('voip-settings-sub');
+      if (sub) sub.textContent = this.settings.voipIntegrationUrl
+        ? '✓ Discagem configurada (ramal ' + (this.settings.voipRamal||'—') + ')'
+        : 'Cole a URL de integração e o ramal para habilitar o clique-para-ligar.';
+    } catch (_) {}
+  },
+
+  async saveSettings() {
+    const voipIntegrationUrl = document.getElementById('voip-url').value.trim();
+    const voipRamal = document.getElementById('voip-ramal').value.trim();
+    try {
+      await fetch('/api/crm/voip-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ voipIntegrationUrl, voipRamal }) });
+      this.settings = { voipIntegrationUrl, voipRamal };
+      UI.addBanner('info', '✓ Configuração de discagem salva.');
+      this.loadSettings();
+    } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
+  },
+
+  // Dispara a discagem (abre a URL de integração) e já prepara o registro manual
+  startCall(leadId, phone, leadName) {
+    if (!phone) { UI.addBanner('warning', 'Este lead não tem telefone cadastrado.'); return; }
+    if (this.settings.voipIntegrationUrl) {
+      const url = this.settings.voipIntegrationUrl.replace('{numero}', phone.replace(/\D/g,''));
+      window.open(url, '_blank', 'noopener');
+    } else {
+      UI.addBanner('warning', 'Configure a URL de discagem na aba Ligações para discar automaticamente. Registrando manualmente...');
+    }
+    this.pending = { leadId, phone, leadName };
+    this.openLogModal();
+  },
+
+  openLogModal() {
+    document.getElementById('call-log-target').textContent = (this.pending?.leadName || 'Sem nome') + ' — ' + (this.pending?.phone || '');
+    document.getElementById('call-f-outcome').value = 'atendida';
+    document.getElementById('call-f-duration').value = '';
+    document.getElementById('call-f-notes').value = '';
+    document.getElementById('call-f-stage').value = '';
+    document.getElementById('call-f-stage-box').style.display = this.pending?.leadId ? '' : 'none';
+    document.getElementById('call-log-modal').classList.remove('hidden');
+  },
+  closeLogModal() { document.getElementById('call-log-modal').classList.add('hidden'); this.pending = null; },
+
+  async saveLog() {
+    if (!this.pending) return;
+    const body = {
+      lead_id: this.pending.leadId || null,
+      phone: this.pending.phone,
+      lead_name: this.pending.leadName || '',
+      outcome: document.getElementById('call-f-outcome').value,
+      duration_sec: (parseFloat(document.getElementById('call-f-duration').value) || 0) * 60,
+      notes: document.getElementById('call-f-notes').value,
+      new_stage: document.getElementById('call-f-stage').value || undefined,
+    };
+    const btn = document.getElementById('call-log-save'); btn.disabled = true; btn.textContent = 'Salvando...';
+    try {
+      const r = await fetch('/api/crm/calls', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Erro');
+      UI.addBanner('info', '✓ Ligação registrada' + (body.new_stage ? ' e lead reclassificado' : ''));
+      this.closeLogModal();
+      this.load();
+      if (body.new_stage) CRM.load(true);
+    } catch (err) { UI.addBanner('error', 'Erro ao registrar: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Salvar registro'; }
+  },
+
+  async load() {
+    try {
+      const [cr, sr] = await Promise.all([
+        fetch('/api/crm/calls').then(r => r.json()),
+        fetch('/api/crm/calls/stats').then(r => r.json()),
+      ]);
+      const s = sr.stats || {};
+      document.getElementById('calls-total').textContent = s.total ?? 0;
+      document.getElementById('calls-taxa').textContent = (s.taxaAtendimento ?? 0) + '%';
+      const mins = Math.round((s.tempoTotal||0)/60);
+      document.getElementById('calls-tempo').textContent = mins + ' min';
+
+      const rows = cr.calls || [];
+      const tb = document.getElementById('calls-table');
+      tb.innerHTML = `<thead><tr><th>Data</th><th>Contato</th><th>Telefone</th><th>Resultado</th><th>Duração</th><th>Anotações</th></tr></thead>
+        <tbody>${rows.map(c => { const o = this.OUTCOMES[c.outcome] || {label:c.outcome,color:'#94a3b8'};
+          const dt = new Date(c.created_at); const dur = Math.round((c.duration_sec||0)/60);
+          return `<tr><td>${dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} ${dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
+            <td style="color:var(--text);font-weight:600">${esc(c.lead_name||'—')}</td><td>${esc(c.phone)}</td>
+            <td><span class="call-outcome-pill" style="background:${o.color}22;color:${o.color}">${o.label}</span></td>
+            <td>${dur} min</td><td>${esc(c.notes||'')}</td></tr>`; }).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-3)">Nenhuma ligação registrada ainda.</td></tr>'}</tbody>`;
+    } catch (err) { UI.addBanner('error', 'Erro ao carregar ligações: ' + err.message); }
+  },
+};
+
 // Troca de abas
 document.addEventListener('DOMContentLoaded', () => {
-  const panels = { crm:'panel-crm', disparador:'panel-disparador', agente:'panel-agente' };
+  const panels = { crm:'panel-crm', disparador:'panel-disparador', agente:'panel-agente', calls:'panel-calls' };
   // Todos os botões de nav e qual painel/subvista cada um ativa
-  const navBtns = ['tab-crm','tab-crm-pipeline','tab-crm-leads','tab-disparador','tab-agente'];
+  const navBtns = ['tab-crm','tab-crm-pipeline','tab-crm-leads','tab-calls','tab-disparador','tab-agente'];
   function setActiveNav(id) { navBtns.forEach(b => { const el = document.getElementById(b); if (el) el.classList.toggle('active', b === id); }); }
   function showPanel(which) { Object.entries(panels).forEach(([k,pid]) => document.getElementById(pid).classList.toggle('hidden', k !== which)); }
 
   document.getElementById('tab-crm').onclick = () => { showPanel('crm'); setActiveNav('tab-crm'); CRM.setView('overview'); };
   document.getElementById('tab-crm-pipeline').onclick = () => { showPanel('crm'); setActiveNav('tab-crm-pipeline'); CRM.setView('pipeline'); };
   document.getElementById('tab-crm-leads').onclick = () => { showPanel('crm'); setActiveNav('tab-crm-leads'); CRM.setView('leads'); };
+  document.getElementById('tab-calls').onclick = () => { showPanel('calls'); setActiveNav('tab-calls'); document.getElementById('page-title').textContent = 'Ligações'; Calls.load(); };
   document.getElementById('tab-disparador').onclick = () => { showPanel('disparador'); setActiveNav('tab-disparador'); document.getElementById('page-title').textContent = 'Disparador'; };
   document.getElementById('tab-agente').onclick = () => {
     showPanel('agente'); setActiveNav('tab-agente');
@@ -3933,6 +4138,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   Agent.init();
   CRM.init();
+  Calls.init();
   CRM.load(); // CRM é a aba inicial
 
   // Detecta retorno do OAuth do Google e exibe resultado
