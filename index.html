@@ -921,13 +921,23 @@
         <span style="font-size:12px;color:var(--text-3)">▾</span>
       </div>
       <div id="voip-settings-fields" style="display:none;margin-top:14px">
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
-          <div class="field" style="margin:0"><label class="field-label">URL de integração <span style="font-weight:400;color:var(--text-3)">— use {numero} no lugar do telefone a discar</span></label>
-            <input type="text" id="voip-url" placeholder="https://voipdobrasil.com.br/click2call?ramal=SEU_RAMAL&numero={numero}&key=SUA_CHAVE" /></div>
-          <div class="field" style="margin:0"><label class="field-label">Ramal</label><input type="text" id="voip-ramal" placeholder="1001" /></div>
+        <div class="field" style="margin:0 0 14px">
+          <label class="field-label">Método de discagem</label>
+          <select id="voip-method">
+            <option value="tel">📱 Abrir app VBphone instalado (recomendado — sem precisar de API)</option>
+            <option value="url">🔗 URL de integração (click-to-call da Voip do Brasil)</option>
+          </select>
         </div>
-        <button class="btn-primary btn-sm" id="btn-voip-save" style="margin-top:8px">Salvar</button>
-        <div class="card-sub" style="margin-top:10px">📍 No painel da Voip do Brasil: <b>Integrações → Gerar Chave de Integração</b>. Cole a URL gerada aqui, trocando o número fixo por <code>{numero}</code>.</div>
+        <div id="voip-tel-info" class="card-sub">O botão "Ligar" vai abrir o VBphone direto no seu computador com o número já preenchido. Funciona se o VBphone estiver instalado e configurado como app padrão de telefone do Windows (Configurações → Aplicativos → Aplicativos padrão → procure "Telefone").</div>
+        <div id="voip-url-fields" style="display:none;margin-top:10px">
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+            <div class="field" style="margin:0"><label class="field-label">URL de integração <span style="font-weight:400;color:var(--text-3)">— use {numero} no lugar do telefone a discar</span></label>
+              <input type="text" id="voip-url" placeholder="https://voipdobrasil.com.br/click2call?ramal=SEU_RAMAL&numero={numero}&key=SUA_CHAVE" /></div>
+            <div class="field" style="margin:0"><label class="field-label">Ramal</label><input type="text" id="voip-ramal" placeholder="1001" /></div>
+          </div>
+          <div class="card-sub" style="margin-top:6px">📍 No painel da Voip do Brasil: <b>Integrações → Gerar Chave de Integração</b>. Cole a URL gerada aqui, trocando o número fixo por <code>{numero}</code>.</div>
+        </div>
+        <button class="btn-primary btn-sm" id="btn-voip-save" style="margin-top:12px">Salvar</button>
       </div>
     </div>
 
@@ -4001,7 +4011,7 @@ const Calls = {
     ocupado:        { label:'⏳ Ocupado',        color:'#fbbf24' },
   },
   pending: null, // { leadId, phone, leadName } aguardando registro após discar
-  settings: { voipIntegrationUrl:'', voipRamal:'' },
+  settings: { voipMethod:'tel', voipIntegrationUrl:'', voipRamal:'' },
 
   init() {
     const stageSel = document.getElementById('call-f-stage');
@@ -4011,6 +4021,8 @@ const Calls = {
       const box = document.getElementById('voip-settings-fields');
       box.style.display = box.style.display === 'none' ? 'block' : 'none';
     });
+    const methodSel = document.getElementById('voip-method');
+    if (methodSel) methodSel.onchange = () => this._toggleMethodFields();
     wire('btn-voip-save', () => this.saveSettings());
     wire('btn-calls-refresh', () => this.load());
     wire('crm-call-btn', () => this.startCall(CRM.editingId, document.getElementById('crm-f-phone').value.trim(), document.getElementById('crm-f-name').value.trim() || document.getElementById('crm-f-company').value.trim()));
@@ -4020,39 +4032,51 @@ const Calls = {
     this.loadSettings();
   },
 
+  _toggleMethodFields() {
+    const method = document.getElementById('voip-method').value;
+    document.getElementById('voip-tel-info').style.display = method === 'tel' ? '' : 'none';
+    document.getElementById('voip-url-fields').style.display = method === 'url' ? '' : 'none';
+  },
+
   async loadSettings() {
     try {
       const j = await fetch('/api/crm/voip-settings').then(r => r.json());
+      this.settings.voipMethod = j.voipMethod || 'tel';
       this.settings.voipIntegrationUrl = j.voipIntegrationUrl || '';
       this.settings.voipRamal = j.voipRamal || '';
+      document.getElementById('voip-method').value = this.settings.voipMethod;
       document.getElementById('voip-url').value = this.settings.voipIntegrationUrl;
       document.getElementById('voip-ramal').value = this.settings.voipRamal;
+      this._toggleMethodFields();
       const sub = document.getElementById('voip-settings-sub');
-      if (sub) sub.textContent = this.settings.voipIntegrationUrl
-        ? '✓ Discagem configurada (ramal ' + (this.settings.voipRamal||'—') + ')'
-        : 'Cole a URL de integração e o ramal para habilitar o clique-para-ligar.';
+      if (sub) sub.textContent = this.settings.voipMethod === 'tel'
+        ? '✓ Discagem via app VBphone instalado (tel:)'
+        : (this.settings.voipIntegrationUrl ? '✓ Discagem configurada (ramal ' + (this.settings.voipRamal||'—') + ')' : 'Cole a URL de integração e o ramal para habilitar o clique-para-ligar.');
     } catch (_) {}
   },
 
   async saveSettings() {
+    const voipMethod = document.getElementById('voip-method').value;
     const voipIntegrationUrl = document.getElementById('voip-url').value.trim();
     const voipRamal = document.getElementById('voip-ramal').value.trim();
     try {
-      await fetch('/api/crm/voip-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ voipIntegrationUrl, voipRamal }) });
-      this.settings = { voipIntegrationUrl, voipRamal };
+      await fetch('/api/crm/voip-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ voipMethod, voipIntegrationUrl, voipRamal }) });
+      this.settings = { voipMethod, voipIntegrationUrl, voipRamal };
       UI.addBanner('info', '✓ Configuração de discagem salva.');
       this.loadSettings();
     } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
   },
 
-  // Dispara a discagem (abre a URL de integração) e já prepara o registro manual
+  // Dispara a discagem (app tel: ou URL de integração) e já prepara o registro manual
   startCall(leadId, phone, leadName) {
     if (!phone) { UI.addBanner('warning', 'Este lead não tem telefone cadastrado.'); return; }
-    if (this.settings.voipIntegrationUrl) {
-      const url = this.settings.voipIntegrationUrl.replace('{numero}', phone.replace(/\D/g,''));
+    const digits = phone.replace(/\D/g,'');
+    if (this.settings.voipMethod === 'url' && this.settings.voipIntegrationUrl) {
+      const url = this.settings.voipIntegrationUrl.replace('{numero}', digits);
       window.open(url, '_blank', 'noopener');
     } else {
-      UI.addBanner('warning', 'Configure a URL de discagem na aba Ligações para discar automaticamente. Registrando manualmente...');
+      // Abre o app padrão de telefone do Windows (VBphone, se registrado) via link tel:
+      const a = document.createElement('a'); a.href = 'tel:' + digits; a.click();
     }
     this.pending = { leadId, phone, leadName };
     this.openLogModal();

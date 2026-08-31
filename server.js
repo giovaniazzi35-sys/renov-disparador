@@ -1975,14 +1975,15 @@ app.get('/api/crm/priorities', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 const CALL_OUTCOMES = ['atendida', 'nao_atendida', 'caixa_postal', 'numero_errado', 'ocupado'];
 
-// Config de discagem do usuário: URL de integração (com {numero}) + ramal
+// Config de discagem do usuário: método (tel: app instalado ou URL de integração) + ramal
 app.get('/api/crm/voip-settings', requireAuth, async (req, res) => {
   const cfg = await getUserConfig(req.session.email);
-  res.json({ ok: true, voipIntegrationUrl: cfg.voipIntegrationUrl || '', voipRamal: cfg.voipRamal || '' });
+  res.json({ ok: true, voipMethod: cfg.voipMethod || 'tel', voipIntegrationUrl: cfg.voipIntegrationUrl || '', voipRamal: cfg.voipRamal || '' });
 });
 app.post('/api/crm/voip-settings', requireAuth, async (req, res) => {
-  const { voipIntegrationUrl, voipRamal } = req.body;
+  const { voipMethod, voipIntegrationUrl, voipRamal } = req.body;
   const cfg = await getUserConfig(req.session.email);
+  cfg.voipMethod = voipMethod === 'url' ? 'url' : 'tel';
   cfg.voipIntegrationUrl = (voipIntegrationUrl || '').trim();
   cfg.voipRamal = (voipRamal || '').trim();
   putUserConfig(req.session.email, cfg);
