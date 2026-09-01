@@ -2130,7 +2130,7 @@ async function parseContactFile(base64, format) {
 // ============================================================
 const OVERPASS_URL  = 'https://overpass-api.de/api/interpreter';
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
-const OSM_UA = 'DoitSend-CRM/1.0 (uso interno — geracao de listas de prospeccao)';
+const OSM_UA = 'DoitSend-CRM/1.0 (uso interno - geracao de listas de prospeccao)';
 
 // Dicionário curto PT-BR → tags OSM comuns, pra ampliar a busca além do nome
 const SEGMENT_TAG_HINTS = {
