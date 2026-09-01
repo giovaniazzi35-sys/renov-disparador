@@ -2155,6 +2155,14 @@ const SEGMENT_TAG_HINTS = {
   pneu: ['tyres'], pneus: ['tyres'],
   moveis: ['furniture'], eletronico: ['electronics'], eletronicos: ['electronics'],
   roupa: ['clothes'], roupas: ['clothes'], loja: [],
+  pizzaria: ['restaurant', 'fast_food'], hamburgueria: ['fast_food'], sorveteria: ['ice_cream'],
+  banco: ['bank'], posto: ['fuel'], papelaria: ['stationery'], livraria: ['books'],
+  joalheria: ['jewelry'], joalharia: ['jewelry'], floricultura: ['florist'],
+  confeitaria: ['confectionery'], doceria: ['confectionery'],
+  informatica: ['computer'], celular: ['mobile_phone'], celulares: ['mobile_phone'],
+  lavanderia: ['laundry'], veterinaria: ['veterinary'], veterinario: ['veterinary'],
+  fotografia: ['photo'], fotografo: ['photo'], grafica: ['copyshop'],
+  chaveiro: ['locksmith'], serralheria: ['locksmith'],
 };
 
 function normalizeTxt(s) {
@@ -2192,24 +2200,29 @@ async function geocodeLocation(location) {
   return { lat: parseFloat(rows[0].lat), lon: parseFloat(rows[0].lon) };
 }
 
+// Busca por regex de nome (["shop"]["name"~"x"]) sem filtro de valor é uma varredura
+// pesada sobre TODO estabelecimento com aquela tag na área — no Overpass público isso
+// estoura o timeout quase sempre. Por isso: quando o dicionário reconhece o termo,
+// usamos só filtros de tag exata (indexados, rápidos); regex de nome só entra como
+// fallback pra termos desconhecidos, e mesmo assim só na tag "shop" (mais comum) e
+// com o raio limitado, pra manter o custo baixo.
 async function overpassSearch(lat, lon, radiusM, segment) {
   const tagHints = segmentTags(segment);
   const nameRegex = segment.replace(/["\\]/g, '').trim();
-  const tagFilters = tagHints.map(t =>
-    `nwr["shop"="${t}"](around:${radiusM},${lat},${lon});nwr["amenity"="${t}"](around:${radiusM},${lat},${lon});nwr["office"="${t}"](around:${radiusM},${lat},${lon});`
-  ).join('\n  ');
-  const query = `[out:json][timeout:25];
-(
-  nwr["shop"]["name"~"${nameRegex}",i](around:${radiusM},${lat},${lon});
-  nwr["amenity"]["name"~"${nameRegex}",i](around:${radiusM},${lat},${lon});
-  nwr["office"]["name"~"${nameRegex}",i](around:${radiusM},${lat},${lon});
-  ${tagFilters}
-);
-out center 300;`;
+  let body;
+  if (tagHints.length) {
+    const tagFilters = tagHints.map(t =>
+      `nwr["shop"="${t}"](around:${radiusM},${lat},${lon});nwr["amenity"="${t}"](around:${radiusM},${lat},${lon});nwr["office"="${t}"](around:${radiusM},${lat},${lon});`
+    ).join('\n  ');
+    body = `[out:json][timeout:20];(\n  ${tagFilters}\n);out center 300;`;
+  } else {
+    const capRadius = Math.min(radiusM, 20000);
+    body = `[out:json][timeout:20];(\n  nwr["shop"]["name"~"${nameRegex}",i](around:${capRadius},${lat},${lon});\n);out center 300;`;
+  }
   const r = await fetchWithRetry(OVERPASS_URLS, {
     method: 'POST', headers: { 'Content-Type': 'text/plain', 'User-Agent': OSM_UA },
-    body: 'data=' + encodeURIComponent(query),
-  }, 1, 12000);
+    body: 'data=' + encodeURIComponent(body),
+  }, 1, 15000);
   const j = await r.json();
   return Array.isArray(j.elements) ? j.elements : [];
 }
@@ -2233,7 +2246,7 @@ app.post('/api/leads/generate', requireAuth, async (req, res) => {
   if (!location) return res.status(400).json({ error: 'Informe a região (ex: Curitiba, PR).' });
   try {
     const { lat, lon } = await geocodeLocation(location);
-    const RADII = [5000, 15000, 40000];
+    const RADII = [10000, 25000, 50000, 80000];
     const found = new Map();
     const deadline = Date.now() + 45000; // deixa folga sob o limite de 60s da função
     for (const radius of RADII) {
