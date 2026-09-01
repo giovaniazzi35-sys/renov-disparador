@@ -3886,7 +3886,9 @@ const Calls = {
       window.open(url, '_blank', 'noopener');
     } else {
       // Abre o app padrão de telefone do Windows (VBphone, se registrado) via link tel:
-      const a = document.createElement('a'); a.href = 'tel:' + digits; a.click();
+      // Usa location.href (não um <a> sintético) — mais confiável pra protocolos
+      // customizados, e o número vai em formato internacional (+DDI DDD numero).
+      window.location.href = 'tel:+' + digits;
     }
     this.pending = { leadId, phone, leadName };
     this.openLogModal();
