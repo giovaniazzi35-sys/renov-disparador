@@ -980,6 +980,9 @@
           <button class="btn-primary" id="btn-leadgen-generate">🔎 Gerar leads</button>
         </div>
       </div>
+      <div class="progress-track hidden" id="leadgen-progress-track" style="margin-top:10px">
+        <div class="progress-fill" id="leadgen-progress-fill" style="width:0%"></div>
+      </div>
       <div id="leadgen-status" style="margin-top:10px;font-size:13px;color:var(--text-3)"></div>
     </div>
 
@@ -4127,12 +4130,25 @@ const Lists = {
     const location = document.getElementById('leadgen-location').value.trim();
     const status = document.getElementById('leadgen-status');
     const btn = document.getElementById('btn-leadgen-generate');
+    const track = document.getElementById('leadgen-progress-track');
+    const fill = document.getElementById('leadgen-progress-fill');
     if (!segment) { status.style.color = '#f87171'; status.textContent = '✗ Informe o segmento.'; return; }
     if (!location) { status.style.color = '#f87171'; status.textContent = '✗ Informe a região.'; return; }
 
     btn.disabled = true; btn.textContent = '⏳ Buscando...';
     status.style.color = 'var(--text-3)';
     status.textContent = `⏳ Buscando "${segment}" em "${location}"... isso pode levar até 1 minuto.`;
+
+    // Barra simulada — a busca é uma única requisição no backend (sem progresso real
+    // pra reportar), então avança suavemente até ~90% enquanto espera e completa no fim.
+    track.classList.remove('hidden');
+    fill.style.width = '0%';
+    let pct = 0;
+    const progressTimer = setInterval(() => {
+      pct = Math.min(pct + (pct < 60 ? 4 : 1.5), 90);
+      fill.style.width = pct + '%';
+    }, 400);
+
     try {
       const r = await fetch('/api/leads/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4140,14 +4156,19 @@ const Lists = {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      clearInterval(progressTimer);
+      fill.style.width = '100%';
       status.style.color = '#4ade80';
       status.textContent = `✓ Lista "${j.list.name}" criada com ${j.total} lead(s) (${j.withPhone} com telefone).` +
         (j.total < 50 ? ' Menos de 50 encontrados nessa região — tente ampliar a área ou o termo.' : '');
       this.load();
     } catch (err) {
+      clearInterval(progressTimer);
+      fill.style.width = '100%';
       status.style.color = '#f87171'; status.textContent = '✗ ' + err.message;
     } finally {
       btn.disabled = false; btn.textContent = '🔎 Gerar leads';
+      setTimeout(() => { track.classList.add('hidden'); fill.style.width = '0%'; }, 800);
     }
   },
 };
