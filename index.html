@@ -3880,7 +3880,10 @@ const Calls = {
   // Dispara a discagem (app tel: ou URL de integração) e já prepara o registro manual
   startCall(leadId, phone, leadName) {
     if (!phone) { UI.addBanner('warning', 'Este lead não tem telefone cadastrado.'); return; }
-    const digits = phone.replace(/\D/g,'');
+    let digits = phone.replace(/\D/g,'');
+    // Garante o DDI 55 — números salvos sem código de país (só DDD+número,
+    // 10 ou 11 dígitos) discam errado se mandados como se já tivessem DDI.
+    if (digits.length <= 11) digits = '55' + digits;
     if (this.settings.voipMethod === 'url' && this.settings.voipIntegrationUrl) {
       const url = this.settings.voipIntegrationUrl.replace('{numero}', digits);
       window.open(url, '_blank', 'noopener');
