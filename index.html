@@ -1526,15 +1526,16 @@
       </div>
     </div>
 
-    <!-- ── Bloco 2: Playbook ── -->
+    <!-- ── Bloco 2: Prompt do Agente ── -->
     <div class="card" style="margin-top:12px">
-      <div class="card-title">🎯 Playbook de Atuação</div>
-      <div class="card-sub">Selecione qual conjunto de mensagens o agente deve usar como contexto para responder os leads.</div>
-      <div id="agent-playbook-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"></div>
-      <details style="margin-top:12px">
-        <summary style="cursor:pointer;font-size:12px;color:var(--text-3);user-select:none;padding:6px 0">⚙ Ver / editar prompt gerado pelo playbook</summary>
-        <textarea id="agent-prompt" rows="10" style="margin-top:8px;min-height:160px;resize:vertical;font-size:11.5px;font-family:monospace"></textarea>
-      </details>
+      <div class="card-title">🎯 Prompt do Agente</div>
+      <div class="card-sub">Cole o texto do prompt abaixo, ou envie um PDF/TXT/MD — fica salvo só na sua conta.</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
+        <button class="btn-ghost btn-sm" id="btn-agent-upload-doc">📎 Enviar PDF / TXT</button>
+        <span class="agent-doc-name hidden" id="agent-doc-name"></span>
+      </div>
+      <div class="inline-err hidden" id="agent-doc-err" style="margin-bottom:8px"></div>
+      <textarea id="agent-prompt" rows="14" placeholder="Cole aqui o prompt do agente (ou envie um arquivo acima)..." style="min-height:220px;resize:vertical;font-size:12.5px;font-family:monospace"></textarea>
       <input type="file" id="agent-doc-file" accept=".pdf,.txt,.md" style="display:none" />
     </div>
 
@@ -2945,34 +2946,6 @@ document.addEventListener('DOMContentLoaded', init);
 // ============================================================
 // PROMPT PADRÃO RENOV
 // ============================================================
-const DEFAULT_AGENT_PROMPT = `Você é um qualificador comercial da Renov Assessoria — especializada em tráfego pago para redes e franquias (70+ cases: iFood, Coca-Cola, Grupo Carreira).
-
-Seu único objetivo: qualificar o lead e marcar uma reunião. Nunca tente vender ou fechar negócio pelo WhatsApp.
-
-Regras:
-- Seja direto, humano e cordial — máximo 3 frases por mensagem
-- Descubra se a pessoa é responsável pelo comercial/marketing
-- Se não for a pessoa certa, peça gentilmente o contato de quem decide
-- Se demonstrar interesse, ofereça 1–2 horários disponíveis para reunião (seg–sex, 11h–17h, horário de Brasília)
-- Na reunião vamos apresentar como geramos em média 250 a 300 potenciais clientes/mês para óticas e redes
-- Se perguntar sobre a Renov: site https://www.renovgestaodigital.com.br/ | Instagram @renovgestaodigital
-- Nunca invente informações. Se não souber, diga que vai verificar.
-- Nunca mencione preços, valores ou propostas — isso é assunto de reunião.
-- Se receber um áudio transcrito com "[Áudio transcrito]:", responda normalmente como se fosse texto.`;
-
-// Apenas os 2 playbooks enviados pelo usuário ficam disponíveis no agente
-const AGENT_PLAYBOOKS = [
-  { label: 'Guia 1 – Óticas', icon: '👓', desc: 'Foco em óticas — previsibilidade de 250–300 clientes/mês. Tom consultivo e direto.', msgs: PLAYBOOK_GUIA1 },
-  { label: '8 Mais Diretas',   icon: '⚡', desc: 'Abordagem direta para redes de óticas e franquias. Perguntas objetivas, sem rodeios.', msgs: PLAYBOOK_DIRETAS },
-];
-
-// Gera prompt do agente baseado no playbook selecionado
-function buildAgentPrompt(playbookIdx) {
-  const group = AGENT_PLAYBOOKS[playbookIdx] || AGENT_PLAYBOOKS[0];
-  const examples = group.msgs.map((m, i) => `[Modelo ${i + 1}]\n${m.text}`).join('\n\n');
-  return DEFAULT_AGENT_PROMPT + `\n\n# Playbook ativo: "${group.label}"\nAs mensagens abaixo foram enviadas aos prospects. Use-as como referência de tom, contexto e proposta de valor ao responder:\n\n${examples}`;
-}
-
 // ============================================================
 // AGENTE IA
 // ============================================================
@@ -2980,7 +2953,6 @@ const Agent = {
   docText: '',
   pollTimer: null,
   convPollTimer: null,
-  selectedPlaybook: 0,
   chatHistory: [], // [{role:'user'|'assistant', content:''}]
 
   async loadInstances() {
@@ -3009,29 +2981,6 @@ const Agent = {
       this.addLog('Instância "' + inst.name + '" desconectada do WhatsApp — verifique a Uzapi', 'err');
     } else {
       warnEl.style.display = 'none';
-    }
-  },
-
-  initPlaybookCards() {
-    const container = document.getElementById('agent-playbook-cards');
-    AGENT_PLAYBOOKS.forEach((group, idx) => {
-      const card = document.createElement('div');
-      card.className = 'agent-pb-card' + (idx === 0 ? ' selected' : '');
-      card.innerHTML = `
-        <div class="agent-pb-icon">${group.icon}</div>
-        <div class="agent-pb-name">${esc(group.label)}</div>
-        <div class="agent-pb-desc">${esc(group.desc)}</div>
-        <div class="agent-pb-count">${group.msgs.length} variações de mensagem</div>`;
-      card.onclick = () => this.selectPlaybook(idx, true);
-      container.appendChild(card);
-    });
-  },
-
-  selectPlaybook(idx, updatePrompt = true) {
-    this.selectedPlaybook = idx;
-    document.querySelectorAll('.agent-pb-card').forEach((c, i) => c.classList.toggle('selected', i === idx));
-    if (updatePrompt) {
-      document.getElementById('agent-prompt').value = buildAgentPrompt(idx);
     }
   },
 
@@ -3075,9 +3024,7 @@ const Agent = {
       const d = j.data;
       this.checkInstanceConnection();
       if (d.model) document.getElementById('agent-model').value = d.model;
-      // Restaura playbook selecionado (ou padrão 0)
-      const pbIdx = typeof d.selectedPlaybook === 'number' ? d.selectedPlaybook : 0;
-      this.selectPlaybook(pbIdx, false); // false = não salva ainda
+      document.getElementById('agent-prompt').value = d.prompt || '';
       // Calendário
       const schedEnable = !!d.schedulingEnabled;
       document.getElementById('agent-scheduling-enabled').checked = schedEnable;
@@ -3099,17 +3046,16 @@ const Agent = {
     const btn = document.getElementById('btn-agent-save');
     btn.disabled = true; btn.textContent = 'Salvando...';
     try {
-      // Prompt vem do textarea (gerado pelo playbook ou editado manualmente)
-      const prompt = document.getElementById('agent-prompt').value.trim() || buildAgentPrompt(this.selectedPlaybook);
+      const prompt = document.getElementById('agent-prompt').value.trim();
       const openrouterKey = document.getElementById('agent-or-key').value.trim();
       const model = document.getElementById('agent-model').value;
+      if (!prompt) { UI.addBanner('warning', 'Cole o prompt do agente ou envie um arquivo.'); return; }
       if (!openrouterKey) { UI.addBanner('warning', 'Informe a chave da API OpenRouter.'); return; }
 
       const res = await fetch('/api/agent/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt, docText: '', openrouterKey, model,
-          selectedPlaybook: this.selectedPlaybook,
+          prompt, docText: this.docText || '', openrouterKey, model,
           schedulingEnabled: document.getElementById('agent-scheduling-enabled').checked,
           googleClientId: document.getElementById('agent-google-client-id').value.trim(),
           googleClientSecret: document.getElementById('agent-google-client-secret').value.trim(),
@@ -3351,8 +3297,9 @@ const Agent = {
     errEl.classList.add('hidden');
 
     if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-      this.docText = await file.text();
-      nameEl.textContent = '📄 ' + file.name + ' (' + (this.docText.length) + ' chars)';
+      const text = (await file.text()).trim();
+      document.getElementById('agent-prompt').value = text;
+      nameEl.textContent = '📄 ' + file.name + ' (' + text.length + ' chars)';
       nameEl.classList.remove('hidden');
       return;
     }
@@ -3369,8 +3316,9 @@ const Agent = {
           const content = await page.getTextContent();
           text += content.items.map(s => s.str).join(' ') + '\n';
         }
-        this.docText = text.trim();
-        nameEl.textContent = '📄 ' + file.name + ' — ' + pdf.numPages + ' pág. (' + this.docText.length + ' chars)';
+        text = text.trim();
+        document.getElementById('agent-prompt').value = text;
+        nameEl.textContent = '📄 ' + file.name + ' — ' + pdf.numPages + ' pág. (' + text.length + ' chars)';
       } catch (err) {
         errEl.textContent = 'Erro ao ler PDF: ' + err.message;
         errEl.classList.remove('hidden');
@@ -3503,14 +3451,14 @@ const Agent = {
       chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
     });
 
-    // Upload documento
+    // Upload documento (PDF/TXT/MD) — vira o prompt do agente
+    document.getElementById('btn-agent-upload-doc').onclick = () => document.getElementById('agent-doc-file').click();
     document.getElementById('agent-doc-file').onchange = e => {
       if (e.target.files[0]) this.readDoc(e.target.files[0]);
     };
 
     document.getElementById('btn-refresh-convs').onclick = () => this.loadConversations();
 
-    this.initPlaybookCards();
     this.loadInstances();
     this.loadConfig();
     this.loadConversations();
