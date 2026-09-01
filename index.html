@@ -1153,6 +1153,7 @@
         <div class="tab-toggle">
           <button class="tab-btn active" data-tab="manual">✏ Manual</button>
           <button class="tab-btn" data-tab="excel">📊 Excel</button>
+          <button class="tab-btn" data-tab="saved-list">📋 Lista salva</button>
         </div>
 
         <!-- Manual -->
@@ -1200,6 +1201,35 @@
             <div class="row-end">
               <button class="btn-ghost btn-sm" id="btn-cancel-excel">Cancelar</button>
               <button class="btn-primary btn-sm" id="btn-import-excel">✓ Importar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista salva -->
+        <div class="tab-content" id="tab-saved-list">
+          <div class="manual-row" style="align-items:end">
+            <div style="flex:1">
+              <label class="field-label">Lista importada</label>
+              <select id="saved-list-select"><option value="">— Selecione uma lista —</option></select>
+            </div>
+            <div>
+              <label class="field-label">&nbsp;</label>
+              <button class="btn-ghost btn-sm" id="btn-saved-list-reload" title="Recarregar listas">↺</button>
+            </div>
+          </div>
+          <div class="hidden mt-16" id="saved-list-preview">
+            <div class="row-between" style="margin-bottom:8px">
+              <span class="card-sub" style="margin:0" id="saved-list-count-label">—</span>
+              <div style="display:flex;gap:8px">
+                <button class="btn-ghost btn-sm" id="btn-saved-list-select-all">Selecionar todos</button>
+                <button class="btn-ghost btn-sm" id="btn-saved-list-select-none">Limpar seleção</button>
+              </div>
+            </div>
+            <div class="preview-wrap" style="max-height:280px;overflow:auto">
+              <table class="preview-table" id="saved-list-table"></table>
+            </div>
+            <div class="row-end" style="margin-top:12px">
+              <button class="btn-primary btn-sm" id="btn-saved-list-import">✓ Adicionar selecionados</button>
             </div>
           </div>
         </div>
@@ -1958,6 +1988,86 @@ const Contacts = {
     });
     UI.renderContacts();
     return { imported, skipped };
+  },
+
+  importFromItems(items) {
+    let imported = 0, skipped = 0;
+    const existing = new Set(AppState.contacts.map(c => c.phone));
+    items.forEach(it => {
+      const phone = this.sanitize(String(it.phone ?? ''));
+      if (phone.length < 10 || existing.has(phone)) { skipped++; return; }
+      existing.add(phone);
+      AppState.contacts.push({ name: (it.name || '').trim() || phone, phone });
+      imported++;
+    });
+    UI.renderContacts();
+    return { imported, skipped };
+  }
+};
+
+// ============================================================
+// SAVED LIST PICKER (Disparador → aba "Lista salva")
+// ============================================================
+const SavedListPicker = {
+  lists: [],
+  items: [],
+
+  async loadLists() {
+    const sel = document.getElementById('saved-list-select');
+    try {
+      const j = await fetch('/api/lists').then(r => r.json());
+      this.lists = j.lists || [];
+      sel.innerHTML = this.lists.length
+        ? '<option value="">— Selecione uma lista —</option>'
+        : '<option value="">Nenhuma lista importada ainda</option>';
+      this.lists.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.id;
+        opt.textContent = `${l.name} (${l.total} contato${l.total === 1 ? '' : 's'})`;
+        sel.appendChild(opt);
+      });
+    } catch (err) {
+      UI.addBanner('error', 'Erro ao carregar listas: ' + err.message);
+    }
+  },
+
+  async onSelectList(listId) {
+    const preview = document.getElementById('saved-list-preview');
+    if (!listId) { preview.classList.add('hidden'); this.items = []; return; }
+    try {
+      const j = await fetch(`/api/lists/${listId}/items`).then(r => r.json());
+      this.items = (j.items || []).filter(it => it.phone);
+      this.renderTable();
+      preview.classList.remove('hidden');
+    } catch (err) {
+      UI.addBanner('error', 'Erro ao carregar contatos da lista: ' + err.message);
+    }
+  },
+
+  renderTable() {
+    const tbl = document.getElementById('saved-list-table');
+    tbl.innerHTML = '<thead><tr><th style="width:30px"></th><th>Nome</th><th>Telefone</th></tr></thead><tbody>' +
+      this.items.map((it, i) => `
+        <tr>
+          <td><input type="checkbox" class="saved-list-check" data-i="${i}" checked /></td>
+          <td>${esc(it.name || '—')}</td>
+          <td>${esc(it.phone || '—')}</td>
+        </tr>`).join('') +
+      '</tbody>';
+    document.getElementById('saved-list-count-label').textContent = `${this.items.length} contato(s) com telefone`;
+  },
+
+  selectAll(checked) {
+    document.querySelectorAll('.saved-list-check').forEach(cb => cb.checked = checked);
+  },
+
+  importSelected() {
+    const checked = new Set([...document.querySelectorAll('.saved-list-check:checked')].map(cb => parseInt(cb.dataset.i)));
+    const selected = this.items.filter((_, i) => checked.has(i));
+    if (!selected.length) { UI.addBanner('warning', 'Selecione ao menos um contato.'); return; }
+    const { imported, skipped } = Contacts.importFromItems(selected);
+    Log.appendSystem(`${imported} contato(s) importado(s) da lista${skipped ? ` · ${skipped} ignorado(s) (duplicado ou sem telefone válido)` : ''}.`);
+    UI.addBanner('info', `✓ ${imported} contato(s) adicionado(s).`);
   }
 };
 
@@ -2507,7 +2617,15 @@ function init() {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${btn.dataset.tab}`));
+    if (btn.dataset.tab === 'saved-list') SavedListPicker.loadLists();
   });
+
+  // Lista salva (importar contatos de uma lista já importada)
+  document.getElementById('saved-list-select').addEventListener('change', e => SavedListPicker.onSelectList(e.target.value));
+  document.getElementById('btn-saved-list-reload').onclick = () => SavedListPicker.loadLists();
+  document.getElementById('btn-saved-list-select-all').onclick = () => SavedListPicker.selectAll(true);
+  document.getElementById('btn-saved-list-select-none').onclick = () => SavedListPicker.selectAll(false);
+  document.getElementById('btn-saved-list-import').onclick = () => SavedListPicker.importSelected();
 
   // Contacts
   document.getElementById('btn-add-contact').onclick = () => {
