@@ -2255,8 +2255,8 @@ app.post('/api/leads/generate', requireAuth, async (req, res) => {
         const elements = await overpassSearch(lat, lon, radius, segment);
         elements.forEach(el => {
           const lead = elementToLead(el);
-          if (!lead) return;
-          const key = lead.name.toLowerCase() + '|' + (lead.phone || el.id);
+          if (!lead || !lead.phone) return; // só interessa quem tem telefone/whatsapp
+          const key = lead.phone;
           if (!found.has(key)) found.set(key, lead);
         });
       } catch (err) {
@@ -2266,7 +2266,7 @@ app.post('/api/leads/generate', requireAuth, async (req, res) => {
     }
     const leads = [...found.values()];
     if (!leads.length) {
-      return res.status(404).json({ error: 'Nenhum estabelecimento encontrado para esse segmento/região (ou o serviço do OpenStreetMap está sobrecarregado no momento). Tente de novo em instantes, um termo mais simples ou uma região maior.' });
+      return res.status(404).json({ error: 'Nenhum estabelecimento com telefone encontrado para esse segmento/região (ou o serviço do OpenStreetMap está sobrecarregado no momento). Tente de novo em instantes, um termo mais simples ou uma região maior.' });
     }
 
     const owner = req.session.email;

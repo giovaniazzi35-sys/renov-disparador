@@ -965,7 +965,7 @@
 
     <div class="card" style="padding:20px;margin-bottom:18px">
       <div class="card-title" style="font-size:15px">🔎 Gerar leads por segmento e região</div>
-      <div class="card-sub" style="margin-bottom:14px">Busca estabelecimentos reais (dados abertos OpenStreetMap) e monta uma lista de pelo menos 50 leads pra você baixar em CSV.</div>
+      <div class="card-sub" style="margin-bottom:14px">Busca estabelecimentos reais (dados abertos OpenStreetMap) e monta uma lista de pelo menos 50 leads com telefone/WhatsApp válido pra você baixar em CSV.</div>
       <div class="manual-row">
         <div>
           <label class="field-label">Segmento</label>
@@ -4159,7 +4159,7 @@ const Lists = {
       clearInterval(progressTimer);
       fill.style.width = '100%';
       status.style.color = '#4ade80';
-      status.textContent = `✓ Lista "${j.list.name}" criada com ${j.total} lead(s) (${j.withPhone} com telefone).` +
+      status.textContent = `✓ Lista "${j.list.name}" criada com ${j.total} lead(s) com telefone/WhatsApp válido.` +
         (j.total < 50 ? ' Menos de 50 encontrados nessa região — tente ampliar a área ou o termo.' : '');
       this.load();
     } catch (err) {
