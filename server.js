@@ -23,20 +23,14 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'renov-secret-2026';
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
-// WAHA (WhatsApp HTTP API) — motor alternativo à Evolution. Ativa quando WAHA_URL
-// estiver definido. Basta hospedar o WAHA e configurar estas variáveis no Vercel.
+// WAHA (WhatsApp HTTP API) — motor alternativo. Ativa quando WAHA_URL estiver definido.
 const WAHA_URL     = (process.env.WAHA_URL || '').replace(/\/$/, '');
 const WAHA_API_KEY = process.env.WAHA_API_KEY || '';
-const WA_PROVIDER  = WAHA_URL ? 'waha' : 'evolution'; // seleção automática
-
-if (!EVOLUTION_URL || EVOLUTION_URL === 'https://SEU_IP_OU_DOMINIO') {
-  console.error('\n  ❌  EVOLUTION_URL não configurada! Edite o arquivo .env.\n');
-  process.exit(1);
-}
-if (!GLOBAL_API_KEY) {
-  console.error('❌ GLOBAL_API_KEY é obrigatória no arquivo .env');
-  process.exit(1);
-}
+// Provedor padrão do app (Evolution está sendo desativada — Uzapi é o provedor
+// principal, configurado por usuário). WA_PROVIDER só decide um fallback global
+// quando o usuário não tem Uzapi configurada; nunca trava a inicialização.
+const WA_PROVIDER = WAHA_URL ? 'waha' : 'evolution';
+if (!EVOLUTION_URL) console.warn('⚠ EVOLUTION_URL não configurada — recursos legados da Evolution ficam indisponíveis (Uzapi é o provedor ativo).');
 
 // Carrega usuários — USERS_JSON (Vercel env var) ou users.json (local)
 function loadUsers() {
@@ -364,11 +358,13 @@ async function uzapiInstanceStatus(cfg) {
 
 // ENVIO UNIFICADO — usado pelo agente, CRM e disparador. Roteia por usuário:
 // Uzapi (se configurada) > WAHA (se WAHA_URL global definida) > Evolution (padrão).
+// A Evolution API foi desativada — Uzapi é o provedor de envio ativo.
 function resolveProvider(cfg) {
-  if (cfg?.waProvider === 'uzapi' && cfg.uzapiToken && cfg.uzapiUsername && cfg.uzapiPhoneId) return 'uzapi';
+  if (cfg?.uzapiToken && cfg.uzapiUsername && cfg.uzapiPhoneId) return 'uzapi';
   if (WA_PROVIDER === 'waha') return 'waha';
-  return 'evolution';
+  return 'none';
 }
+const NO_PROVIDER_ERR = { ok: false, status: 400, text: async () => 'Nenhum provedor de WhatsApp configurado. Preencha suas credenciais da Uzapi na aba Agente.' };
 async function waSendText(wa, phone, text) {
   const provider = resolveProvider(wa);
   if (provider === 'uzapi') {
@@ -379,23 +375,13 @@ async function waSendText(wa, phone, text) {
     const r = await wahaSendText(wa.session || wa.instanceName, phone, text);
     return { ok: r.ok, status: r.status, text: () => r.text() };
   }
-  return proxyFetch(`${EVOLUTION_URL}/send/text`, {
-    method: 'POST', headers: { apikey: wa.instanceToken },
-    body: JSON.stringify({ number: String(phone).replace(/\D/g, ''), text, delay: wa.delay || 0 }),
-  });
+  return NO_PROVIDER_ERR;
 }
 async function waSendMedia(wa, phone, opts) {
   const provider = resolveProvider(wa);
   if (provider === 'uzapi') return uzapiSendMedia(wa, phone, opts);
   if (provider === 'waha') return wahaSendMedia(wa.session || wa.instanceName, phone, opts);
-  // Evolution: usa o formato já validado no app (base64/url no campo "url")
-  const body = { number: String(phone).replace(/\D/g, ''), type: opts.type, caption: opts.caption || '', filename: opts.filename || 'arquivo' };
-  body.url = opts.url || (opts.base64 || '').replace(/^data:[^,]+,/, '');
-  if (opts.mimetype) body.mimetype = opts.mimetype;
-  return proxyFetch(`${EVOLUTION_URL}/send/media`, {
-    method: 'POST', headers: { apikey: wa.instanceToken },
-    body: JSON.stringify(body),
-  });
+  return NO_PROVIDER_ERR;
 }
 
 // ── API ──────────────────────────────────────────────────────
@@ -406,273 +392,60 @@ function appWebhookUrl(req) {
   return `${proto}://${req.get('host')}/api/agent/webhook`;
 }
 
-// Lista as instâncias do servidor Evolution (fluxo simples: usuário carrega,
-// seleciona a sua e usa o token — a conexão/QR é feita direto no painel da Evolution).
+// Status da instância Uzapi do usuário logado (usado pelo Disparador e pela aba Agente)
 app.get('/api/instances', requireAuth, async (req, res) => {
-  logReq('GET', '/api/instances', req.session.email);
+  const cfg = await getUserConfig(req.session.email);
+  if (resolveProvider(cfg) !== 'uzapi') return res.json([]);
   try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
-    const all = await up.json().catch(() => []);
-    const rows = Array.isArray(all) ? all : (all.data || []);
-    const list = rows.map(r => ({
-      name: r.name || r.instanceName || r.id || '',
-      token: r.token || '',
-      id: r.id || '',
-      connected: !!r.connected,
-      jid: r.jid || '',
-    }));
-    res.json(list);
+    const r = await uzapiInstanceStatus(cfg);
+    res.json([{ name: cfg.uzapiUsername, connected: !!r.ok, provider: 'uzapi' }]);
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
-// Cria uma NOVA instância reservada ao usuário logado — o app gera o token
-app.post('/api/instance/create', requireAuth, async (req, res) => {
-  const email = req.session.email;
-  const rawName = (req.body.name || 'renov').toString().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 18) || 'renov';
-  const suffix = require('crypto').randomBytes(3).toString('hex');
-  const name = `${rawName}_${suffix}`;
-  const token = require('crypto').randomUUID();
-  logReq('POST', '/api/instance/create', `${email} -> ${name}`);
-  try {
-    // 0. Auto-limpeza: remove instâncias do usuário que nunca conectaram (sem jid)
-    // para não acumular sessões mortas que saturam o Evolution Go.
-    const preCfg = await getUserConfig(email);
-    const preOwned = Array.isArray(preCfg.ownedInstances) ? preCfg.ownedInstances : [];
-    if (preOwned.length) {
-      try {
-        const allR = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
-        const allD = await allR.json().catch(() => []);
-        const allRows = Array.isArray(allD) ? allD : (allD.data || []);
-        const byName = new Map(allRows.map(r => [r.name, r]));
-        const keep = [];
-        for (const inst of preOwned) {
-          const live = byName.get(inst.name);
-          const neverPaired = live && !live.connected && !live.jid;
-          if (neverPaired && live.id) {
-            await proxyFetch(`${EVOLUTION_URL}/instance/delete/${encodeURIComponent(live.id)}`, { method: 'DELETE', headers: { apikey: GLOBAL_API_KEY } }).catch(() => {});
-            console.log(`[CREATE] auto-removida instância morta ${inst.name}`);
-          } else {
-            keep.push(inst);
-          }
-        }
-        if (keep.length !== preOwned.length) { preCfg.ownedInstances = keep; putUserConfig(email, preCfg); }
-      } catch (_) {}
-    }
-
-    // 1. Cria a instância no Evolution (token definido por nós)
-    const cr = await proxyFetch(`${EVOLUTION_URL}/instance/create`, {
-      method: 'POST', headers: { apikey: GLOBAL_API_KEY },
-      body: JSON.stringify({ instanceName: name, name, token }),
-    });
-    const crBody = await cr.json().catch(() => ({}));
-    if (!cr.ok) return res.status(cr.status).json({ error: translateEvolutionError(cr.status, crBody) });
-
-    // Não conecta aqui — a conexão acontece uma única vez ao gerar o QR
-    // (evita abrir clientes WhatsApp duplicados e saturar o Evolution Go).
-
-    // Registra a posse na config do usuário (guarda o id para exclusão futura)
-    const instId = crBody?.data?.id || '';
-    const cfg = await getUserConfig(email);
-    cfg.ownedInstances = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
-    cfg.ownedInstances.push({ name, token, id: instId, createdAt: new Date().toISOString() });
-    putUserConfig(email, cfg);
-
-    res.json({ ok: true, name, token });
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-// Exclui uma instância — só se pertencer ao usuário logado
-app.delete('/api/instance/:name', requireAuth, async (req, res) => {
-  const email = req.session.email;
-  const name = req.params.name;
-  const cfg = await getUserConfig(email);
-  const owned = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
-  const mine = owned.find(o => o.name === name) || (cfg.instanceName === name ? { name, token: cfg.instanceToken } : null);
-  if (!mine) return res.status(403).json({ error: 'Esta instância não pertence à sua conta.' });
-  logReq('DELETE', '/api/instance/' + name, email);
-  try {
-    // O Evolution Go exclui por ID (UUID), não pelo nome. Usa o id salvo,
-    // ou busca em /instance/all pelo nome se for instância antiga.
-    let instId = mine.id || '';
-    if (!instId) {
-      const allRes = await proxyFetch(`${EVOLUTION_URL}/instance/all`, { method: 'GET', headers: { apikey: GLOBAL_API_KEY } });
-      const all = await allRes.json().catch(() => []);
-      const rows = Array.isArray(all) ? all : (all.data || []);
-      instId = (rows.find(r => r.name === name) || {}).id || '';
-    }
-    // Encerra a sessão (se houver) e remove a instância no Evolution
-    await proxyFetch(`${EVOLUTION_URL}/instance/logout`, { method: 'DELETE', headers: { apikey: mine.token } }).catch(() => {});
-    const up = instId
-      ? await proxyFetch(`${EVOLUTION_URL}/instance/delete/${encodeURIComponent(instId)}`, { method: 'DELETE', headers: { apikey: GLOBAL_API_KEY } })
-      : { ok: false, status: 404, json: async () => ({ error: 'instância não encontrada no servidor' }) };
-    const body = await up.json().catch(() => ({}));
-    // Remove da posse do usuário mesmo se o Evolution falhar (não deixa lixo na conta)
-    cfg.ownedInstances = owned.filter(o => o.name !== name);
-    if (cfg.instanceName === name) { cfg.instanceName = ''; cfg.instanceToken = ''; }
-    putUserConfig(email, cfg);
-    if (!up.ok) return res.status(200).json({ ok: true, warning: translateEvolutionError(up.status, body) });
-    res.json({ ok: true });
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-// Verifica se o token pertence ao usuário logado (segurança das rotas por token)
-async function userOwnsToken(email, token) {
-  if (!token) return false;
-  const cfg = await getUserConfig(email);
-  const owned = Array.isArray(cfg.ownedInstances) ? cfg.ownedInstances : [];
-  if (owned.some(o => o.token === token)) return true;
-  return cfg.instanceToken === token; // instância legada do próprio usuário
-}
-
-app.post('/api/instance/connect', requireAuth, async (req, res) => {
-  const { instanceToken, webhookUrl, subscribe } = req.body;
-  if (!instanceToken) return res.status(400).json({ error: 'instanceToken é obrigatório.' });
-  try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/connect`, {
-      method: 'POST', headers: { apikey: instanceToken },
-      body: JSON.stringify({ webhookUrl: webhookUrl || '', subscribe: subscribe || ['MESSAGE'] }),
-    });
-    res.status(up.status).json(await up.json());
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-app.get('/api/instance/qr', requireAuth, async (req, res) => {
-  const token = req.headers['x-instance-token'];
-  if (!token) return res.status(400).json({ error: 'x-instance-token obrigatório.' });
-  try {
-    // O QR leva alguns segundos para ficar pronto após o connect — tenta várias
-    // vezes aqui no servidor (mais confiável que depender do navegador).
-    let last = null;
-    for (let i = 0; i < 8; i++) {
-      if (i > 0) await new Promise(r => setTimeout(r, 2000));
-      const up = await proxyFetch(`${EVOLUTION_URL}/instance/qr`, { method: 'GET', headers: { apikey: token } });
-      const body = await up.json().catch(() => ({}));
-      const qr = body?.data?.qrcode || body?.data?.code;
-      if (up.ok && qr) return res.json(body);
-      last = { status: up.status, body };
-      // Não reconecta no meio — cada connect abre um cliente WhatsApp novo no
-      // servidor e satura o Evolution Go. Apenas aguarda o QR da sessão atual.
-    }
-    const msg = last?.body?.error || last?.body?.message || 'QR não disponível';
-    res.status(503).json({ error: `${msg}. O servidor Evolution pode estar instável — tente novamente em instantes.` });
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-app.post('/api/instance/pair', requireAuth, async (req, res) => {
-  const { instanceToken, phone } = req.body;
-  if (!instanceToken) return res.status(400).json({ error: 'instanceToken é obrigatório.' });
-  try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/pair`, {
-      method: 'POST', headers: { apikey: instanceToken },
-      body: JSON.stringify({ phone }),
-    });
-    res.status(up.status).json(await up.json());
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-app.get('/api/instance/status', requireAuth, async (req, res) => {
-  const token = req.headers['x-instance-token'];
-  if (!token) return res.status(400).json({ error: 'x-instance-token obrigatório.' });
-  try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/status`, { method: 'GET', headers: { apikey: token } });
-    res.status(up.status).json(await up.json());
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
+// Envio de texto — usado pelo Disparador. Usa a Uzapi do usuário logado.
 app.post('/api/send/text', requireAuth, async (req, res) => {
-  const { instanceToken, text } = req.body;
   const number = normalizeNumber(req.body.number || '');
-  if (!instanceToken) return res.status(400).json({ error: 'instanceToken obrigatório.' });
+  const { text } = req.body;
   if (!number || !/^\d{10,15}$/.test(number)) return res.status(400).json({ error: 'Número inválido.' });
   if (!text || !text.trim()) return res.status(400).json({ error: 'Texto vazio.' });
   logReq('POST', '/api/send/text', number);
   try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-      method: 'POST', headers: { apikey: instanceToken },
-      body: JSON.stringify({ number, text: text.trim(), delay: 0 }),
-    });
-    const body = await up.json();
-    if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
-    res.status(up.status).json(body);
+    const cfg = await getUserConfig(req.session.email);
+    if (resolveProvider(cfg) === 'none') return res.status(400).json({ error: 'Configure suas credenciais da Uzapi na aba Agente antes de disparar.' });
+    const up = await waSendText(cfg, number, text.trim());
+    if (!up.ok) return res.status(up.status).json({ error: await up.text().catch(() => `Erro ${up.status}`) });
+    res.json({ ok: true });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
+// Envio de mídia por URL
 app.post('/api/send/media', requireAuth, async (req, res) => {
-  const { instanceToken, url, type, caption, filename } = req.body;
+  const { url, type, caption, filename } = req.body;
   const number = normalizeNumber(req.body.number || '');
-  if (!instanceToken || !number || !url || !type) return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
+  if (!number || !url || !type) return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/send/media`, {
-      method: 'POST', headers: { apikey: instanceToken },
-      body: JSON.stringify({ number, url, type, caption, filename }),
-    });
-    const body = await up.json();
-    if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
-    res.status(up.status).json(body);
+    const cfg = await getUserConfig(req.session.email);
+    if (resolveProvider(cfg) === 'none') return res.status(400).json({ error: 'Configure suas credenciais da Uzapi na aba Agente antes de disparar.' });
+    const up = await waSendMedia(cfg, number, { type, url, caption, filename });
+    if (!up.ok) return res.status(up.status).json({ error: await up.text().catch(() => `Erro ${up.status}`) });
+    res.json({ ok: true });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
-// ── Envio de mídia via base64 (upload de arquivo) ───────────
+// Envio de mídia via base64 (upload de arquivo)
 app.post('/api/send/media-upload', requireAuth, async (req, res) => {
-  const { instanceToken, mediaBase64, mediaType, mimetype, caption, filename, ptt } = req.body;
+  const { mediaBase64, mediaType, mimetype, caption, filename, ptt } = req.body;
   const number = normalizeNumber(req.body.number || '');
-  if (!instanceToken || !number || !mediaBase64) {
-    return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
-  }
+  if (!number || !mediaBase64) return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   logReq('POST', '/api/send/media-upload', number);
-  // Evolution Go: base64 vai no campo "url" (sem o prefixo data:...;base64,)
-  const base64Data = mediaBase64.replace(/^data:[^;]+;base64,/, '');
   const resolvedMime = mimetype || guessMime(mediaType, filename);
-  // Áudio (inclusive PTT) usa type "audio" — o /send/audio não existe nesta versão
-  const evoType = ptt ? 'audio' : mediaType;
+  const type = ptt ? 'audio' : mediaType;
   try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/send/media`, {
-      method: 'POST', headers: { apikey: instanceToken },
-      body: JSON.stringify({
-        number, type: evoType,
-        url: base64Data,
-        mimetype: resolvedMime,
-        caption: caption || '',
-        filename: filename || `arquivo.${resolvedMime.split('/')[1] || 'bin'}`,
-      }),
-    });
-    const body = await up.json().catch(() => ({}));
-    if (!up.ok) return res.status(up.status).json({ error: translateEvolutionError(up.status, body) });
-    res.status(up.status).json(body);
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-app.post('/api/instance/logout', requireAuth, async (req, res) => {
-  const { instanceToken } = req.body;
-  if (!instanceToken) return res.status(400).json({ error: 'instanceToken obrigatório.' });
-  try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/logout`, {
-      method: 'DELETE', headers: { apikey: instanceToken },
-    });
-    res.status(up.status).json(await up.json());
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-app.post('/api/instance/restart', requireAuth, async (req, res) => {
-  const { instanceToken } = req.body;
-  if (!instanceToken) return res.status(400).json({ error: 'instanceToken obrigatório.' });
-  try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/instance/restart`, {
-      method: 'PUT', headers: { apikey: instanceToken },
-    });
-    res.status(up.status).json(await up.json());
-  } catch (err) { res.status(502).json({ error: err.message }); }
-});
-
-app.post('/api/user/check', requireAuth, async (req, res) => {
-  const { instanceToken, number } = req.body;
-  if (!instanceToken || !number) return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
-  try {
-    const up = await proxyFetch(`${EVOLUTION_URL}/user/check`, {
-      method: 'POST', headers: { apikey: instanceToken },
-      body: JSON.stringify({ number: Array.isArray(number) ? number : [number] }),
-    });
-    res.status(up.status).json(await up.json());
+    const cfg = await getUserConfig(req.session.email);
+    if (resolveProvider(cfg) === 'none') return res.status(400).json({ error: 'Configure suas credenciais da Uzapi na aba Agente antes de disparar.' });
+    const up = await waSendMedia(cfg, number, { type, base64: mediaBase64, mimetype: resolvedMime, caption, filename: filename || `arquivo.${resolvedMime.split('/')[1] || 'bin'}` });
+    if (!up.ok) return res.status(up.status).json({ error: await up.text().catch(() => `Erro ${up.status}`) });
+    res.json({ ok: true });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
@@ -745,6 +518,20 @@ async function findConfigByToken(token) {
       return { id: rows[0].id, cfg: autoActivate({ ...DEFAULT_CFG(), ...rows[0].data }) };
     }
   } catch (err) { console.warn('findConfigByToken error:', err.message); }
+  return null;
+}
+
+// Encontra a config do usuário dono de um phone_number_id da Uzapi (webhooks)
+async function findConfigByUzapiPhoneId(phoneId) {
+  if (!phoneId || !SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const q = encodeURIComponent(phoneId);
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/agent_config?data->>uzapiPhoneId=eq.${q}&select=id,data`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    if (r.ok && Array.isArray(rows) && rows[0]?.data) {
+      return { id: rows[0].id, cfg: autoActivate({ ...DEFAULT_CFG(), ...rows[0].data }) };
+    }
+  } catch (err) { console.warn('findConfigByUzapiPhoneId error:', err.message); }
   return null;
 }
 
@@ -1096,17 +883,14 @@ function forwardDestinations(cfg) {
 async function forwardIndication(sendToken, cfg, textMsg) {
   const dests = forwardDestinations(cfg);
   if (!dests.length) { console.warn('[INDICACAO] sem destino configurado para', cfg?.owner); return false; }
+  const waCfg = { ...cfg, instanceToken: sendToken };
   for (const dest of dests) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const r = await proxyFetch(`${EVOLUTION_URL}/send/text`, {
-          method: 'POST',
-          headers: { apikey: sendToken },
-          body: JSON.stringify({ number: dest, text: textMsg, delay: 800 }),
-        });
+        const r = await waSendText(waCfg, dest, textMsg);
         if (r.ok) { console.log(`[INDICACAO] enviada para ${dest} (tentativa ${attempt})`); return true; }
-        const errBody = await r.text().catch(() => '');
-        console.warn(`[INDICACAO] ${dest} tentativa ${attempt} falhou (${r.status}): ${errBody.slice(0, 200)}`);
+        const errBody = await (r.text ? r.text() : Promise.resolve('')).catch(() => '');
+        console.warn(`[INDICACAO] ${dest} tentativa ${attempt} falhou (${r.status}): ${String(errBody).slice(0, 200)}`);
       } catch (err) {
         console.warn(`[INDICACAO] ${dest} tentativa ${attempt} erro: ${err.message}`);
       }
@@ -1143,16 +927,43 @@ function extractContacts(data) {
   return list;
 }
 
-// Busca o base64 do áudio: primeiro no próprio payload (Evolution Go pode embutir),
-// depois via endpoint de mídia da Evolution API
-async function getAudioBase64(data, rawPayload, token) {
-  // 1. Base64 embutido no webhook (config "webhook base64" da Evolution)
+// Baixa mídia da Uzapi por id (endpoint /{username}/{version}/{mediaId}) e retorna base64
+async function uzapiDownloadMedia(cfg, mediaId) {
+  if (!mediaId || !cfg?.uzapiToken) return null;
+  try {
+    const r = await proxyFetch(`https://api.uzapi.com.br/${encodeURIComponent(cfg.uzapiUsername)}/v1/${encodeURIComponent(mediaId)}`, {
+      method: 'GET', headers: { 'Authorization': `Bearer ${cfg.uzapiToken}` },
+    });
+    if (!r.ok) { console.warn(`[AUDIO] download Uzapi falhou (${r.status})`); return null; }
+    // Pode vir como JSON {base64} ou como binário/base64 cru — trata os dois casos
+    const txt = await r.text();
+    try {
+      const j = JSON.parse(txt);
+      if (j.base64 || j.data) return j.base64 || j.data;
+    } catch (_) {
+      // não é JSON — assume binário/base64 cru na resposta
+      if (txt && txt.length > 100) return Buffer.from(txt, 'binary').toString('base64');
+    }
+    return null;
+  } catch (err) { console.warn('[AUDIO] erro no download Uzapi:', err.message); return null; }
+}
+
+// Busca o base64 do áudio: embutido no payload, Uzapi (por mediaId) ou Evolution (legado)
+async function getAudioBase64(data, rawPayload, token, cfg) {
+  // 1. Base64 embutido no webhook
   const inline = rawPayload?.Base64 || rawPayload?.base64 || data?.base64
     || data?.message?.base64 || data?.message?.audioMessage?.base64;
   if (inline && typeof inline === 'string' && inline.length > 100) return inline;
 
-  // 2. Endpoint de download de mídia
-  if (!data?.key || !token) return null;
+  // 2. Uzapi — baixa por media id
+  const uzapiMediaId = data?.message?.audioMessage?.id;
+  if (uzapiMediaId && cfg?.uzapiToken) {
+    const b64 = await uzapiDownloadMedia(cfg, uzapiMediaId);
+    if (b64) return b64;
+  }
+
+  // 3. Evolution (legado) — endpoint de download de mídia
+  if (!data?.key || !token || !EVOLUTION_URL) return null;
   try {
     const mediaRes = await proxyFetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage`, {
       method: 'POST',
@@ -1171,10 +982,10 @@ async function getAudioBase64(data, rawPayload, token) {
   }
 }
 
-async function transcribeAudio(data, apiKey, instanceToken, rawPayload) {
+async function transcribeAudio(data, apiKey, instanceToken, rawPayload, cfg) {
   try {
     const token = instanceToken || agentConfig.instanceToken;
-    const base64 = await getAudioBase64(data, rawPayload, token);
+    const base64 = await getAudioBase64(data, rawPayload, token, cfg);
     if (!base64) return null;
 
     // Modelos com suporte a áudio: Gemini gratuitos da lista ao vivo primeiro
@@ -1411,46 +1222,65 @@ app.post('/api/agent/toggle', requireAuth, async (req, res) => {
 // no Vercel, responder cedo congela a função e mata o buffer/modelo/envio.
 app.post('/api/agent/webhook', async (req, res) => {
   try {
-    // Salva payload bruto para debug
-    const rawEvent = req.body?.event || req.body?.type || '';
-    webhookLog.push({ ts: new Date().toISOString(), event: rawEvent, body: JSON.stringify(req.body).slice(0, 500) });
+    const body = req.body || {};
+    webhookLog.push({ ts: new Date().toISOString(), event: body.object || body.event || body.type || '?', body: JSON.stringify(body).slice(0, 500) });
     if (webhookLog.length > 30) webhookLog.shift();
-    console.log(`[WEBHOOK] event="${rawEvent}" keys=${Object.keys(req.body || {}).join(',')}`);
 
-    // Token da instância que recebeu a mensagem
-    const sendToken = req.body?.instanceToken || '';
-    const instName  = req.body?.instanceName || '';
+    // Formato Uzapi (idêntico ao WhatsApp Cloud API): { object, entry:[{changes:[{value:{...}}]}] }
+    const isUzapiFormat = body.object === 'whatsapp_business_account' || Array.isArray(body.entry);
 
-    // MULTIUSUÁRIO: descobre de qual usuário é esta instância pelo token.
-    // Cada usuário tem sua própria config; a config legada (id=1) é o fallback.
-    let cfg = null;
-    if (sendToken) {
-      const owner = await findConfigByToken(sendToken);
-      if (owner) { cfg = owner.cfg; console.log(`[WEBHOOK] instância de ${cfg.owner || 'id='+owner.id}`); }
-    }
-    if (!cfg) cfg = agentConfig; // fallback legado (mantém a instância giovani viva)
+    let cfg = null, effToken = '', msgData = null, picked = null;
 
-    const effToken = sendToken || cfg.instanceToken || '';
-    if (!cfg.active || !effToken) {
-      console.log(`[WEBHOOK] ignorado — active=${cfg.active} token=${!!effToken}`);
-      return;
-    }
+    if (isUzapiFormat) {
+      const value = (body.entry?.[0]?.changes?.[0]?.value) || {};
+      const phoneNumberId = value.metadata?.phone_number_id || '';
+      const msg = (value.messages || [])[0];
+      console.log(`[WEBHOOK] uzapi phoneId=${phoneNumberId} temMensagem=${!!msg} tipo=${msg?.type || '-'}`);
+      if (!msg) return; // eventos sem mensagem (status de entrega, conexão etc.) — só confirma recebimento
 
-    // Evolution Go usa "Message"; Evolution JS usa "messages.upsert" — aceita ambos
-    const ev = rawEvent.toUpperCase().replace(/[.\-_]/g, '');
-    const isMessageEvent = ev === 'MESSAGE' || ev === 'MESSAGESUPSERT' || ev === 'MESSAGES';
-    if (!isMessageEvent) {
-      console.log(`[WEBHOOK] evento ignorado: ${rawEvent}`);
-      return;
-    }
+      const owner = await findConfigByUzapiPhoneId(phoneNumberId);
+      cfg = owner ? owner.cfg : agentConfig;
+      if (!cfg.active) { console.log(`[WEBHOOK] ignorado — active=${cfg.active} (uzapi phoneId=${phoneNumberId})`); return; }
 
-    // Normaliza data — pode ser objeto, array, formato Baileys ou whatsmeow (Evolution Go)
-    const rawData = req.body?.data;
-    const picked = Array.isArray(rawData) ? rawData[0] : (rawData || req.body?.messages?.[0] || req.body);
-    const msgData = normalizeMsgData(picked);
-    if (!msgData || typeof msgData !== 'object' || !msgData.key) {
-      console.log(`[WEBHOOK] payload não reconhecido: ${JSON.stringify(picked).slice(0, 400)}`);
-      return;
+      const waId = (msg.from || '').replace(/\D/g, '');
+      const contactName = (value.contacts || [])[0]?.profile?.name || '';
+      const messageObj = {};
+      if (msg.type === 'text') messageObj.conversation = msg.text?.body || '';
+      else if (msg.type === 'audio') messageObj.audioMessage = { ...(msg.audio || {}) };
+      else if (msg.type === 'image') messageObj.imageMessage = { ...(msg.image || {}) };
+      else if (msg.type === 'document') messageObj.documentMessage = { ...(msg.document || {}) };
+      else if (msg.type === 'contacts') messageObj.contactsArrayMessage = { contacts: (msg.contacts || []).map(c => ({ displayName: c.name?.formatted_name || '', vcard: `TEL:${c.phones?.[0]?.phone || ''}\nFN:${c.name?.formatted_name || ''}` })) };
+
+      msgData = {
+        key: { remoteJid: `${waId}@s.whatsapp.net`, fromMe: false, id: msg.id || '' },
+        message: messageObj,
+        messageType: msg.type === 'text' ? '' : `${msg.type}Message`,
+        pushName: contactName,
+      };
+      picked = msg; // usado pela transcrição de áudio (media id da Uzapi)
+      effToken = ''; // Uzapi não usa apikey por requisição — resolve tudo pela cfg
+    } else {
+      // Formato legado (Evolution) — mantido durante a transição
+      const rawEvent = body?.event || body?.type || '';
+      const sendToken = body?.instanceToken || '';
+      if (sendToken) {
+        const owner = await findConfigByToken(sendToken);
+        if (owner) cfg = owner.cfg;
+      }
+      if (!cfg) cfg = agentConfig;
+      effToken = sendToken || cfg.instanceToken || '';
+      if (!cfg.active || !effToken) { console.log(`[WEBHOOK] ignorado — active=${cfg.active} token=${!!effToken}`); return; }
+
+      const ev = rawEvent.toUpperCase().replace(/[.\-_]/g, '');
+      if (!(ev === 'MESSAGE' || ev === 'MESSAGESUPSERT' || ev === 'MESSAGES')) { console.log(`[WEBHOOK] evento ignorado: ${rawEvent}`); return; }
+
+      const rawData = body?.data;
+      picked = Array.isArray(rawData) ? rawData[0] : (rawData || body?.messages?.[0] || body);
+      msgData = normalizeMsgData(picked);
+      if (!msgData || typeof msgData !== 'object' || !msgData.key) {
+        console.log(`[WEBHOOK] payload não reconhecido: ${JSON.stringify(picked).slice(0, 400)}`);
+        return;
+      }
     }
 
     console.log(`[WEBHOOK] fromMe=${msgData.key.fromMe} jid=${msgData.key.remoteJid} type=${msgData.messageType}`);
@@ -1489,7 +1319,7 @@ app.post('/api/agent/webhook', async (req, res) => {
     // Transcreve áudio se necessário
     if (!text && isAudioMessage(msgData)) {
       console.log(`[${ts}] 🎙 Áudio recebido de ${from} — transcrevendo...`);
-      const transcription = await transcribeAudio(msgData, key, effToken, picked);
+      const transcription = await transcribeAudio(msgData, key, effToken, picked, cfg);
       if (transcription) {
         text = `[Áudio transcrito]: ${transcription}`;
         console.log(`[${ts}] 🎙 Transcrição: ${transcription.slice(0, 80)}`);
@@ -2091,6 +1921,25 @@ app.post('/api/agent/uzapi-test', requireAuth, async (req, res) => {
     const r = await uzapiInstanceStatus(cfg);
     if (!r.ok) return res.status(r.status || 502).json({ error: r.raw?.message || `Falha ao consultar a instância (HTTP ${r.status}).` });
     res.json({ ok: true, status: r.raw });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Configura automaticamente o webhook da instância Uzapi para apontar pro app
+app.post('/api/agent/uzapi-configure-webhook', requireAuth, async (req, res) => {
+  const cfg = await getUserConfig(req.session.email);
+  if (!cfg.uzapiToken || !cfg.uzapiUsername || !cfg.uzapiPhoneId) {
+    return res.status(400).json({ error: 'Preencha username, phone number ID e token antes de configurar o webhook.' });
+  }
+  try {
+    const webhookUrl = appWebhookUrl(req);
+    const r = await proxyFetch(`${uzapiBase(cfg)}/instance/update`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${cfg.uzapiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhook: webhookUrl }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status).json({ error: body?.message || `Falha ao configurar webhook (HTTP ${r.status}).` });
+    res.json({ ok: true, webhookUrl });
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 

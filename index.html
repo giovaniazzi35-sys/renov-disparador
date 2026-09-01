@@ -802,9 +802,6 @@
     <button class="nav-item" id="tab-disparador"><span class="nav-ico">📤</span> Disparador</button>
     <button class="nav-item" id="tab-agente"><span class="nav-ico">🤖</span> WhatsApp / Agente</button>
 
-    <div class="sidebar-label">Gestão</div>
-    <a class="nav-item" href="https://129.121.54.221" target="_blank" rel="noopener"><span class="nav-ico">🔌</span> Painel Evolution</a>
-
     <div class="sidebar-spacer"></div>
     <div class="sidebar-user">
       <img id="user-pic" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' rx='16' fill='%231a2236'/%3E%3C/svg%3E" alt="" />
@@ -1103,57 +1100,34 @@
     </div>
   </div>
 
-  <!-- ═══ STEP 1: INSTÂNCIA ════════════════════════════════ -->
+  <!-- ═══ STEP 1: CONEXÃO WHATSAPP (Uzapi) ══════════════════ -->
   <div class="step-panel active" data-panel="1">
     <div class="card">
-      <div class="card-title">Qual instância vamos usar?</div>
-      <div class="card-sub">Selecione a instância do WhatsApp e informe o token de acesso. Se a instância não estiver conectada, use os botões abaixo para conectar.</div>
+      <div class="card-title">Conexão WhatsApp</div>
+      <div class="card-sub">O disparo usa a Uzapi configurada na aba <b>WhatsApp/Agente</b>. Nenhuma instância pra selecionar aqui — é sua conta, automaticamente.</div>
 
-      <div class="field">
-        <label class="field-label">Instância</label>
-        <div class="instance-row">
-          <select id="instance-select">
-            <option value="">— Clique em Carregar para buscar —</option>
-          </select>
-          <span class="instance-status">
-            <span class="status-dot" id="instance-dot"></span>
-            <span id="instance-status-label">—</span>
-          </span>
-          <button class="btn-ghost btn-sm" id="btn-load-instances">↺ Carregar</button>
-        </div>
-        <!-- Último contato disparado nesta instância -->
-        <div class="last-contact-box hidden" id="last-contact-box">
-          <span class="lc-label">📍 Último disparo:</span>
-          <span class="lc-name" id="lc-name">—</span>
-          <span class="lc-phone" id="lc-phone">—</span>
-          <span class="lc-time" id="lc-time">—</span>
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Token da Instância</label>
-        <div class="token-row">
-          <input type="password" id="instance-token" placeholder="Token da instância selecionada" />
-          <button class="btn-icon" id="btn-toggle-token-vis" title="Mostrar/ocultar">👁</button>
-          <button class="btn-ghost btn-sm" id="btn-save-token">💾</button>
-        </div>
-        <div class="inline-err hidden" id="step1-error">Selecione uma instância e informe o token.</div>
-      </div>
-
-      <!-- Status da conexão (a conexão/QR é feita direto no painel da Evolution) -->
-      <div class="conn-card">
+      <div class="conn-card" style="margin-top:16px">
         <div class="row-between">
           <div>
             <div class="card-title" style="margin:0;font-size:14px">Status da conexão</div>
-            <div class="card-sub" style="margin:4px 0 0">Conecte e leia o QR direto no painel da Evolution. Aqui é só selecionar a instância e verificar.</div>
+            <div class="card-sub" style="margin:4px 0 0" id="disp-uzapi-sub">Verificando...</div>
           </div>
           <span class="conn-badge disconnected" id="conn-badge">● —</span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
-          <button class="btn-ghost btn-sm" id="btn-check-conn">✓ Verificar conexão</button>
+          <button class="btn-ghost btn-sm" id="btn-check-conn">↺ Verificar conexão</button>
+          <button class="btn-ghost btn-sm" id="btn-goto-agent-uzapi">⚙ Configurar credenciais</button>
         </div>
       </div>
 
+      <!-- Último contato disparado -->
+      <div class="last-contact-box hidden" id="last-contact-box" style="margin-top:14px">
+        <span class="lc-label">📍 Último disparo:</span>
+        <span class="lc-name" id="lc-name">—</span>
+        <span class="lc-phone" id="lc-phone">—</span>
+        <span class="lc-time" id="lc-time">—</span>
+      </div>
+      <div class="inline-err hidden" id="step1-error">Configure suas credenciais da Uzapi na aba Agente antes de continuar.</div>
     </div>
 
     <div class="step-nav">
@@ -1490,46 +1464,12 @@
       <span class="agent-instance-label" id="agent-instance-label"></span>
     </div>
 
-    <!-- ── Bloco 1: Conexão WhatsApp ── -->
+    <!-- ── Bloco 1: Conexão WhatsApp (Uzapi) ── -->
     <div class="card">
-      <div class="card-title">📱 Conexão WhatsApp</div>
-      <div class="agent-two-col">
-        <div class="field" style="margin:0">
-          <label class="field-label">Instância</label>
-          <div class="instance-row">
-            <select id="agent-instance-select"><option value="">— Selecione —</option></select>
-            <button class="btn-ghost btn-sm" id="btn-agent-load-instances" title="Recarregar instâncias">↺</button>
-          </div>
-        </div>
-        <div class="field" style="margin:0">
-          <label class="field-label">Token da instância</label>
-          <div class="token-row">
-            <input type="password" id="agent-token" placeholder="Token da instância" />
-            <button class="btn-icon" id="btn-agent-toggle-token">👁</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Webhook compacto -->
-      <div class="agent-webhook-row">
-        <span class="agent-webhook-label">📡 Webhook</span>
-        <div class="webhook-url-box" id="webhook-url-box" title="Clique para copiar" style="flex:1;margin:0"></div>
-        <div class="agent-webhook-tip">evento: <code>messages.upsert</code></div>
-      </div>
-    </div>
-
-    <!-- ── Bloco 1.5: Provedor de WhatsApp (Evolution ou Uzapi) ── -->
-    <div class="card" style="margin-top:12px">
-      <div class="card-title">🔀 Provedor de WhatsApp</div>
-      <div class="card-sub" style="margin-bottom:12px">Por padrão o app usa a Evolution API acima. Se preferir, cole suas credenciais da Uzapi e ative — o agente e o CRM passam a enviar por ela.</div>
-      <div class="field" style="margin:0 0 14px">
-        <label class="field-label">Provedor ativo</label>
-        <select id="uzapi-provider">
-          <option value="evolution">Evolution API (padrão, instância acima)</option>
-          <option value="uzapi">Uzapi</option>
-        </select>
-      </div>
-      <div id="uzapi-fields" style="display:none">
+      <div class="card-title">📱 Conexão WhatsApp — Uzapi</div>
+      <div class="card-sub" style="margin-bottom:12px">Cole suas credenciais da Uzapi abaixo — o agente e o CRM enviam por ela.</div>
+      <input type="hidden" id="uzapi-provider" value="uzapi" />
+      <div id="uzapi-fields">
         <div class="agent-two-col">
           <div class="field" style="margin:0">
             <label class="field-label">Username <span style="font-weight:400;color:var(--text-3)">— o mesmo do seu login Uzapi</span></label>
@@ -1927,9 +1867,7 @@ const Stepper = {
   },
 
   fillPreSummary() {
-    const sel = document.getElementById('instance-select');
-    const instName = sel.options[sel.selectedIndex]?.text || '—';
-    document.getElementById('pre-instance').textContent = instName;
+    document.getElementById('pre-instance').textContent = Instances.uzapiLabel || '—';
     document.getElementById('pre-contacts').textContent = `${AppState.contacts.length} contatos`;
     const minV = document.getElementById('delay-min').value;
     const maxV = document.getElementById('delay-max').value;
@@ -1944,323 +1882,47 @@ const Stepper = {
 // INSTANCES
 // ============================================================
 const Instances = {
-  async load() {
-    const btn = document.getElementById('btn-load-instances');
-    btn.disabled = true; btn.textContent = '↺ Carregando...';
-    try {
-      const instances = await API.getAllInstances();
-      const sel = document.getElementById('instance-select');
-      sel.innerHTML = instances.length
-        ? '<option value="">— Selecione —</option>'
-        : '<option value="">Nenhuma instância encontrada</option>';
-      instances.forEach(inst => {
-        // Guarda o token vindo do servidor (auto-captura para os disparos)
-        if (inst.token) localStorage.setItem(`token:${inst.name}`, inst.token);
-        const opt = document.createElement('option');
-        opt.value = inst.name || inst.id;
-        opt.dataset.connected = inst.connected ? '1' : '0';
-        opt.textContent = (inst.name || inst.id) + (inst.connected ? ' ✓' : ' ⚠');
-        sel.appendChild(opt);
-      });
-      if (instances.length === 1) {
-        sel.value = instances[0].name || instances[0].id;
-        this.onSelect(sel.value, instances[0].connected);
-      }
-    } catch (err) {
-      UI.addBanner('error', `Erro ao carregar instâncias: ${err.message}`);
-    } finally {
-      btn.disabled = false; btn.textContent = '↺ Carregar';
-    }
-  },
+  connected: false,
+  uzapiLabel: '',
 
-  // Cria uma nova instância reservada ao usuário e já mostra o QR
-  async createInstance() {
-    const btn = document.getElementById('btn-create-instance');
-    const nome = (prompt('Nome para a nova instância (ex: minha-empresa):', 'renov') || '').trim();
-    if (nome === '') return;
-    btn.disabled = true; btn.textContent = '⏳ Criando...';
-    try {
-      const res = await fetch('/api/instance/create', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nome }),
-      });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`);
-      // Salva o token e seleciona a nova instância
-      localStorage.setItem(`token:${j.name}`, j.token);
-      document.getElementById('instance-token').value = j.token;
-      const sel = document.getElementById('instance-select');
-      const opt = document.createElement('option');
-      opt.value = j.name; opt.textContent = j.name + ' ⚠'; sel.appendChild(opt);
-      sel.value = j.name;
-      UI.addBanner('info', `✓ Instância "${j.name}" criada! Escaneie o QR para conectar.`);
-      this.renderManagerList();
-      await this.showQR();
-    } catch (err) {
-      UI.addBanner('error', `Erro ao criar instância: ${err.message}`);
-    } finally {
-      btn.disabled = false; btn.textContent = '➕ Criar nova instância';
-    }
-  },
-
-  // Renderiza a lista de instâncias do usuário com ações (conectar / excluir)
-  async renderManagerList() {
-    const box = document.getElementById('instance-manager-list');
-    if (!box) return;
-    try {
-      const instances = await API.getAllInstances();
-      if (!instances.length) {
-        box.innerHTML = '<div style="font-size:12px;color:var(--text-3)">Nenhuma instância ainda. Clique em “Criar nova instância”.</div>';
-        return;
-      }
-      box.innerHTML = '';
-      instances.forEach(inst => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px';
-        const dotColor = inst.connected ? '#4ade80' : '#f87171';
-        row.innerHTML = `
-          <span style="color:${dotColor};font-size:10px">●</span>
-          <span style="flex:1;font-size:13px;font-weight:600">${esc(inst.name)}</span>
-          <span style="font-size:11px;color:var(--text-3)">${inst.connected ? 'conectada' : 'desconectada'}</span>
-          <button class="btn-ghost btn-sm" data-use="${esc(inst.name)}" style="padding:3px 10px;font-size:11px">usar</button>
-          <button class="btn-ghost btn-sm" data-qr="${esc(inst.name)}" style="padding:3px 10px;font-size:11px">📷 QR</button>
-          <button class="btn-ghost btn-sm" data-del-inst="${esc(inst.name)}" style="padding:3px 8px;font-size:11px;color:#f87171">🗑</button>`;
-        box.appendChild(row);
-      });
-
-      box.querySelectorAll('[data-use]').forEach(b => b.onclick = () => {
-        const n = b.dataset.use;
-        document.getElementById('instance-select').value = n;
-        document.getElementById('instance-token').value = localStorage.getItem('token:' + n) || '';
-        this.checkStatus(true);
-        UI.addBanner('info', `Instância “${n}” selecionada.`);
-      });
-      box.querySelectorAll('[data-qr]').forEach(b => b.onclick = async () => {
-        const n = b.dataset.qr;
-        document.getElementById('instance-select').value = n;
-        document.getElementById('instance-token').value = localStorage.getItem('token:' + n) || '';
-        await this.showQR();
-      });
-      box.querySelectorAll('[data-del-inst]').forEach(b => b.onclick = () => this.deleteInstance(b.dataset.delInst));
-    } catch (err) {
-      box.innerHTML = `<div style="font-size:12px;color:#f87171">Erro ao listar: ${esc(err.message)}</div>`;
-    }
-  },
-
-  async deleteInstance(name) {
-    if (!confirm(`Excluir a instância “${name}”?\n\nIsso desconecta o WhatsApp e remove a instância da sua conta.`)) return;
-    try {
-      const res = await fetch(`/api/instance/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-      localStorage.removeItem('token:' + name);
-      if (document.getElementById('instance-select').value === name) {
-        document.getElementById('instance-select').value = '';
-        document.getElementById('instance-token').value = '';
-      }
-      UI.addBanner('info', j.warning ? `Instância removida da sua conta (aviso: ${j.warning})` : `✓ Instância “${name}” excluída.`);
-      await this.load();
-      await this.renderManagerList();
-    } catch (err) {
-      UI.addBanner('error', `Erro ao excluir: ${err.message}`);
-    }
-  },
-
-  onSelect(name, connected) {
-    const dot = document.getElementById('instance-dot');
-    const lbl = document.getElementById('instance-status-label');
-    if (!name) { dot.className = 'status-dot'; lbl.textContent = '—'; this.updateConnCard(false, ''); return; }
-    if (connected !== undefined) {
-      dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-      lbl.textContent = connected ? 'Conectado' : 'Desconectado';
-      this.updateConnCard(connected, '');
-    }
-    const saved = localStorage.getItem(`token:${name}`);
-    document.getElementById('instance-token').value = saved || '';
-    // Auto-check status se token já salvo
-    if (saved) setTimeout(() => this.checkStatus(true), 300);
-  },
-
-  updateConnCard(connected, phone) {
-    const dot = document.getElementById('instance-dot');
-    const lbl = document.getElementById('instance-status-label');
-    if (dot) { dot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected'); }
-    if (lbl) { lbl.textContent = connected ? 'Conectado' : 'Desconectado'; }
+  updateConnCard(connected, label) {
+    this.connected = connected;
     const badge = document.getElementById('conn-badge');
     if (badge) {
       badge.className = 'conn-badge ' + (connected ? 'connected' : 'disconnected');
-      badge.textContent = connected ? ('● Conectado' + (phone ? ' — ' + phone : '')) : '● Desconectado';
+      badge.textContent = connected ? ('● Conectado' + (label ? ' — ' + label : '')) : '● Desconectado';
     }
-  },
-
-  _extractPhone(data) {
-    // Tenta vários campos que a Evolution Go pode retornar
-    const jid = data?.data?.ownerJid || data?.data?.myJid || data?.instance?.ownerJid || '';
-    return jid.replace(/@.+/, '').replace(/\D/g,'');
-  },
-
-  saveToken() {
-    const name = document.getElementById('instance-select').value;
-    const token = document.getElementById('instance-token').value.trim();
-    if (!name || !token) return;
-    localStorage.setItem(`token:${name}`, token);
-    UI.flashBtn(document.getElementById('btn-save-token'), '✓');
-    setTimeout(() => this.checkStatus(true), 200);
+    const sub = document.getElementById('disp-uzapi-sub');
+    if (sub) sub.textContent = connected ? `Uzapi conectada${label ? ' — ' + label : ''}` : 'Uzapi não conectada. Configure suas credenciais na aba Agente.';
   },
 
   getToken() {
-    return document.getElementById('instance-token').value.trim();
+    return this.connected;
   },
 
   async checkStatus(silent) {
-    const token = this.getToken();
-    if (!token) { if (!silent) UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
     const badge = document.getElementById('conn-badge');
-    // Só mostra "Verificando..." em checagem manual — nas automáticas evita o "piscar"
-    if (!silent) { badge.className = 'conn-badge checking'; badge.textContent = '● Verificando...'; }
+    if (!silent && badge) { badge.className = 'conn-badge checking'; badge.textContent = '● Verificando...'; }
     try {
-      const data = await API.getStatus(token);
-      const d = data?.data || data?.instance || data || {};
-      let connected = d.connected || d.loggedIn
-                     || d.Connected || d.LoggedIn
-                     || d.connectionStatus === 'open'
-                     || d.state === 'open'
-                     || d.status === 'Connected'
-                     || d.status === 'CONNECTED'
-                     || false;
-      // Histerese: se estava conectado e leu desconectado uma única vez numa
-      // checagem automática, ignora (blip de reconexão) — só cai após 2 leituras
-      if (silent && !connected && AppState.lastConnected) {
-        AppState._discBlips = (AppState._discBlips || 0) + 1;
-        if (AppState._discBlips < 2) connected = true; // mantém conectado por ora
-        else AppState._discBlips = 0;
-      } else if (connected) {
-        AppState._discBlips = 0;
+      const instances = await API.getAllInstances();
+      const inst = instances[0];
+      if (!inst) {
+        this.uzapiLabel = '';
+        this.updateConnCard(false, '');
+        if (!silent) UI.addBanner('warning', 'Configure suas credenciais da Uzapi na aba Agente.');
+        return false;
       }
-      AppState.lastConnected = connected;
-      const phone = this._extractPhone(data);
-      this.updateConnCard(connected, phone);
+      this.uzapiLabel = inst.name || '';
+      this.updateConnCard(!!inst.connected, inst.name);
       if (!silent) {
-        if (connected) UI.addBanner('info', `✓ Conectado${phone ? ' — ' + phone : ''}`);
-        else UI.addBanner('warning', '⚠ Não conectado. Use os botões abaixo para conectar.');
+        if (inst.connected) UI.addBanner('info', `✓ Conectado — ${inst.name}`);
+        else UI.addBanner('warning', '⚠ Não conectado. Verifique suas credenciais da Uzapi na aba Agente.');
       }
-      return connected;
+      return !!inst.connected;
     } catch (err) {
-      if (!silent) { badge.className = 'conn-badge disconnected'; badge.textContent = '● Erro'; UI.addBanner('error', `Erro ao verificar: ${err.message}`); }
-      return AppState.lastConnected || false;
+      if (!silent) { if (badge) { badge.className = 'conn-badge disconnected'; badge.textContent = '● Erro'; } UI.addBanner('error', `Erro ao verificar: ${err.message}`); }
+      return false;
     }
-  },
-
-  _startConnPoll() {
-    // Verifica conexão a cada 3s enquanto o modal estiver aberto.
-    // Mantém o QR na tela por no mínimo 10s antes de fechar automaticamente.
-    clearInterval(AppState.connPollTimer);
-    AppState.connPollTimer = setInterval(async () => {
-      const modal = document.getElementById('modal-connect');
-      if (modal.classList.contains('hidden')) { clearInterval(AppState.connPollTimer); return; }
-      const connected = await this.checkStatus(true);
-      const shownFor = Date.now() - (AppState.qrShownAt || 0);
-      if (connected && shownFor >= 10000) {
-        clearInterval(AppState.connPollTimer);
-        clearInterval(AppState.qrTimer);
-        modal.classList.add('hidden');
-        UI.addBanner('info', '✅ WhatsApp conectado com sucesso!');
-        this.load(); this.renderManagerList();
-      }
-    }, 3000);
-  },
-
-  async showQR() {
-    const token = this.getToken();
-    if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
-    await API.connectInstance(token, window.location.protocol + '//' + window.location.host + '/api/agent/webhook');
-
-    // O backend já tenta várias vezes (o QR leva alguns segundos para ficar pronto)
-    UI.addBanner('info', '⏳ Gerando QR Code...');
-    const data = await API.getQR(token);
-    const code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
-    if (!code) {
-      UI.addBanner('error', data?.error || 'Não foi possível gerar o QR Code. Tente novamente em instantes.');
-      return;
-    }
-
-    document.getElementById('qr-img').src = code;
-    AppState.qrShownAt = Date.now(); // marca quando o QR apareceu (mín. 10s na tela)
-    document.getElementById('modal-qr-section').classList.remove('hidden');
-    document.getElementById('modal-pair-section').classList.add('hidden');
-    document.getElementById('modal-title').textContent = 'Conectar via QR Code';
-    document.getElementById('modal-sub').textContent = 'Abra o WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie o QR';
-    document.getElementById('modal-connect').classList.remove('hidden');
-    UI.addBanner('info', '📷 QR Code na tela — escaneie com o WhatsApp.');
-
-    clearInterval(AppState.qrTimer);
-    AppState.qrCountdown = 60;
-    document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
-    AppState.qrTimer = setInterval(() => {
-      AppState.qrCountdown--;
-      document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
-      if (AppState.qrCountdown <= 0) { clearInterval(AppState.qrTimer); document.getElementById('qr-countdown').textContent = 'expirado'; }
-    }, 1000);
-
-    this._startConnPoll();
-  },
-
-  async refreshQR() {
-    const token = this.getToken();
-    if (!token) return;
-    const data = await API.getQR(token);
-    const code = data?.data?.qrcode || data?.data?.code || data?.qrcode;
-    if (code) {
-      document.getElementById('qr-img').src = code;
-      clearInterval(AppState.qrTimer);
-      AppState.qrCountdown = 60;
-      document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
-      AppState.qrTimer = setInterval(() => {
-        AppState.qrCountdown--;
-        document.getElementById('qr-countdown').textContent = AppState.qrCountdown;
-        if (AppState.qrCountdown <= 0) clearInterval(AppState.qrTimer);
-      }, 1000);
-    }
-  },
-
-  async requestPairCode() {
-    const token = this.getToken();
-    const phone = document.getElementById('pair-phone').value.replace(/\D/g,'');
-    if (!token) { UI.addBanner('warning', 'Informe o token da instância primeiro.'); return; }
-    if (phone.length < 10) { UI.addBanner('warning', 'Informe um número de telefone válido com DDI.'); return; }
-
-    const data = await API.pairCode(token, phone);
-    const code = data?.data?.code;
-    if (!code) { UI.addBanner('error', 'Não foi possível gerar o código. Verifique o token e tente novamente.'); return; }
-
-    document.getElementById('pair-code-display').textContent = code;
-    document.getElementById('modal-qr-section').classList.add('hidden');
-    document.getElementById('modal-pair-section').classList.remove('hidden');
-    document.getElementById('modal-title').textContent = 'Conectar via Código';
-    document.getElementById('modal-sub').textContent = '';
-    document.getElementById('modal-connect').classList.remove('hidden');
-    this._startConnPoll();
-  },
-
-  async logout() {
-    const token = this.getToken();
-    if (!token) return;
-    try {
-      await fetch('/api/instance/logout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ instanceToken: token }) });
-      this.updateConnCard(false, '');
-      UI.addBanner('info', 'Instância desconectada.');
-    } catch (err) { UI.addBanner('error', `Erro ao desconectar: ${err.message}`); }
-  },
-
-  async restart() {
-    const token = this.getToken();
-    if (!token) return;
-    const badge = document.getElementById('conn-badge');
-    badge.className = 'conn-badge checking'; badge.textContent = '● Reconectando...';
-    try {
-      await fetch('/api/instance/restart', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ instanceToken: token }) });
-      setTimeout(() => this.checkStatus(false), 3000);
-    } catch (err) { UI.addBanner('error', `Erro ao reconectar: ${err.message}`); }
   }
 };
 
@@ -2584,7 +2246,7 @@ const Dispatch = {
     const errEl = document.getElementById('dispatch-validation-error');
     errEl.classList.add('hidden');
     const token = Instances.getToken();
-    if (!token) { errEl.textContent = 'Token da instância não informado.'; errEl.classList.remove('hidden'); return; }
+    if (!token) { errEl.textContent = 'Uzapi não conectada. Configure suas credenciais na aba Agente.'; errEl.classList.remove('hidden'); return; }
     if (!AppState.contacts.length) { errEl.textContent = 'Nenhum contato.'; errEl.classList.remove('hidden'); return; }
     if (!Message.getActive().length) { errEl.textContent = 'Mensagem vazia.'; errEl.classList.remove('hidden'); return; }
 
@@ -2750,7 +2412,7 @@ const UI = {
 // ============================================================
 const Validate = {
   step1() {
-    const ok = document.getElementById('instance-select').value && Instances.getToken();
+    const ok = Instances.getToken();
     document.getElementById('step1-error').classList.toggle('hidden', !!ok);
     return !!ok;
   },
@@ -2831,48 +2493,15 @@ function init() {
   // Expõe para uso no dispatch loop
   window._saveLastContact = saveLastContact;
 
-  // Instance
-  document.getElementById('btn-load-instances').onclick = () => Instances.load();
-  document.getElementById('instance-select').addEventListener('change', e => {
-    const opt = e.target.options[e.target.selectedIndex];
-    Instances.onSelect(e.target.value, opt.dataset.connected === '1');
-    // Mostra último contato desta instância
-    const token = document.getElementById('instance-token').value.trim();
-    if (token) showLastContact(token);
-    else document.getElementById('last-contact-box').classList.add('hidden');
-  });
-  document.getElementById('btn-save-token').onclick = () => {
-    Instances.saveToken();
-    const token = document.getElementById('instance-token').value.trim();
-    if (token) showLastContact(token);
-  };
-  document.getElementById('btn-toggle-token-vis').onclick = () => {
-    const inp = document.getElementById('instance-token');
-    inp.type = inp.type === 'password' ? 'text' : 'password';
-  };
-
-  // Connect / disconnect buttons (removidos do layout — guards para não quebrar)
+  // Instance (Uzapi)
   const _wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
-  _wire('btn-show-qr', () => Instances.showQR());
-  _wire('btn-show-pair', () => { const s = document.getElementById('pair-input-section'); if (s) s.classList.toggle('hidden'); });
-  _wire('btn-check-status', () => Instances.checkStatus(false));
-  _wire('btn-request-pair', () => Instances.requestPairCode());
-  _wire('btn-disconnect', () => Instances.logout());
-  _wire('btn-restart-inst', () => Instances.restart());
-  // Botão de verificar conexão do Step 1
   _wire('btn-check-conn', () => Instances.checkStatus(false));
-
-  // Modal
-  document.getElementById('btn-modal-close').onclick = () => {
-    document.getElementById('modal-connect').classList.add('hidden');
-    clearInterval(AppState.qrTimer);
-  };
-  document.getElementById('btn-refresh-qr').onclick = () => Instances.refreshQR();
-  document.getElementById('btn-modal-check-status').onclick = async () => {
-    await Instances.checkStatus();
-    document.getElementById('modal-connect').classList.add('hidden');
-    clearInterval(AppState.qrTimer);
-  };
+  _wire('btn-goto-agent-uzapi', () => {
+    const tab = document.getElementById('tab-agente');
+    if (tab) tab.click();
+    setTimeout(() => { const el = document.getElementById('uzapi-username'); if (el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
+  });
+  Instances.checkStatus(true);
 
   // Tabs
   document.querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => {
@@ -3237,43 +2866,29 @@ const Agent = {
   chatHistory: [], // [{role:'user'|'assistant', content:''}]
 
   async loadInstances() {
-    const sel = document.getElementById('agent-instance-select');
     try {
       const instances = await API.getAllInstances();
       this._instances = instances;
-      sel.innerHTML = instances.length
-        ? '<option value="">— Selecione —</option>'
-        : '<option value="">Nenhuma instância encontrada</option>';
-      instances.forEach(inst => {
-        // Auto-captura o token da instância do usuário
-        if (inst.token) localStorage.setItem(`token:${inst.name}`, inst.token);
-        const opt = document.createElement('option');
-        opt.value = inst.name;
-        opt.textContent = inst.name + (inst.connected ? ' ✓' : ' ⚠ desconectada');
-        sel.appendChild(opt);
-      });
       this.checkInstanceConnection();
     } catch (err) {
       UI.addBanner('error', 'Erro ao carregar instâncias: ' + err.message);
     }
   },
 
-  // Avisa em destaque se a instância escolhida caiu do WhatsApp
+  // Avisa em destaque se a instância Uzapi caiu do WhatsApp
   checkInstanceConnection() {
-    const sel = document.getElementById('agent-instance-select');
-    const name = sel?.value;
+    const inst = (this._instances || [])[0];
     let warnEl = document.getElementById('agent-conn-warning');
     if (!warnEl) {
       warnEl = document.createElement('div');
       warnEl.id = 'agent-conn-warning';
       warnEl.style.cssText = 'display:none;margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#f87171;font-size:13px;font-weight:600';
-      sel?.closest('.card, section, div')?.appendChild(warnEl);
+      document.getElementById('panel-agente')?.querySelector('.card')?.appendChild(warnEl);
     }
-    const inst = (this._instances || []).find(i => i.name === name);
-    if (name && inst && !inst.connected) {
+    if (inst && !inst.connected) {
       warnEl.style.display = 'block';
-      warnEl.textContent = '⚠ A instância "' + name + '" está DESCONECTADA do WhatsApp — o agente não recebe nem responde mensagens. Vá na aba Disparador e escaneie o QR code para reconectar.';
-      this.addLog('Instância "' + name + '" desconectada do WhatsApp — reconecte pelo QR code', 'err');
+      warnEl.textContent = '⚠ A instância "' + inst.name + '" está DESCONECTADA do WhatsApp — o agente não recebe nem responde mensagens. Confira suas credenciais da Uzapi.';
+      this.addLog('Instância "' + inst.name + '" desconectada do WhatsApp — verifique a Uzapi', 'err');
     } else {
       warnEl.style.display = 'none';
     }
@@ -3340,9 +2955,7 @@ const Agent = {
       const j = await res.json();
       if (!j.ok) return;
       const d = j.data;
-      document.getElementById('agent-instance-select').value = d.instanceName || '';
       this.checkInstanceConnection();
-      document.getElementById('agent-token').value = d.instanceToken || '';
       if (d.model) document.getElementById('agent-model').value = d.model;
       // Restaura playbook selecionado (ou padrão 0)
       const pbIdx = typeof d.selectedPlaybook === 'number' ? d.selectedPlaybook : 0;
@@ -3368,19 +2981,16 @@ const Agent = {
     const btn = document.getElementById('btn-agent-save');
     btn.disabled = true; btn.textContent = 'Salvando...';
     try {
-      const instanceName = document.getElementById('agent-instance-select').value;
-      const instanceToken = document.getElementById('agent-token').value.trim();
       // Prompt vem do textarea (gerado pelo playbook ou editado manualmente)
       const prompt = document.getElementById('agent-prompt').value.trim() || buildAgentPrompt(this.selectedPlaybook);
       const openrouterKey = document.getElementById('agent-or-key').value.trim();
       const model = document.getElementById('agent-model').value;
-      if (!instanceToken) { UI.addBanner('warning', 'Informe o token da instância.'); return; }
       if (!openrouterKey) { UI.addBanner('warning', 'Informe a chave da API OpenRouter.'); return; }
 
       const res = await fetch('/api/agent/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceName, instanceToken, prompt, docText: '', openrouterKey, model,
+          prompt, docText: '', openrouterKey, model,
           selectedPlaybook: this.selectedPlaybook,
           schedulingEnabled: document.getElementById('agent-scheduling-enabled').checked,
           googleClientId: document.getElementById('agent-google-client-id').value.trim(),
@@ -3391,9 +3001,8 @@ const Agent = {
       if (j.ok) {
         localStorage.setItem('agent_or_key', openrouterKey);
         UI.addBanner('info', '✓ Configuração salva! Agente ativo.');
-        document.getElementById('agent-instance-label').textContent = instanceName ? '📱 ' + instanceName : '';
-        // Auto-ativa badge se campos preenchidos
-        if (instanceToken && openrouterKey) this.updateBadge(true);
+        // Auto-ativa badge se campo preenchido
+        if (openrouterKey) this.updateBadge(true);
       } else {
         UI.addBanner('error', 'Erro ao salvar configuração.');
       }
@@ -3731,17 +3340,6 @@ const Agent = {
   },
 
   init() {
-    // Webhook URL — usa protocol+host para evitar null em certos contextos
-    const webhookUrl = window.location.protocol + '//' + window.location.host + '/api/agent/webhook';
-    const wbox = document.getElementById('webhook-url-box');
-    wbox.textContent = webhookUrl;
-    wbox.onclick = () => {
-      navigator.clipboard.writeText(webhookUrl).then(() => {
-        wbox.textContent = '✓ Copiado!';
-        setTimeout(() => { wbox.textContent = webhookUrl; }, 2000);
-      });
-    };
-
     // Botões config
     // Toggle seção calendário
     document.getElementById('agent-scheduling-enabled').onchange = e => {
@@ -3751,15 +3349,10 @@ const Agent = {
     document.getElementById('btn-google-disconnect').onclick = () => this.googleDisconnect();
     document.getElementById('btn-test-calendar').onclick = () => this.testCalendar();
 
-    document.getElementById('btn-agent-load-instances').onclick = () => this.loadInstances();
     document.getElementById('btn-agent-save').onclick = () => this.save();
     document.getElementById('btn-toggle-agent').onclick = () => this.toggle();
     document.getElementById('btn-agent-test-key').onclick = () => this.testKey();
 
-    // Provedor de WhatsApp (Uzapi)
-    document.getElementById('uzapi-provider').onchange = (e) => {
-      document.getElementById('uzapi-fields').style.display = e.target.value === 'uzapi' ? '' : 'none';
-    };
     document.getElementById('btn-uzapi-toggle-token').onclick = () => {
       const inp = document.getElementById('uzapi-token');
       inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -3771,11 +3364,7 @@ const Agent = {
       document.getElementById('agent-log').innerHTML = '<div class="agent-log-line" style="color:var(--text-3)">Log limpo.</div>';
     };
 
-    // Visibilidade token / chave
-    document.getElementById('btn-agent-toggle-token').onclick = () => {
-      const inp = document.getElementById('agent-token');
-      inp.type = inp.type === 'password' ? 'text' : 'password';
-    };
+    // Visibilidade chave
     document.getElementById('btn-agent-toggle-key').onclick = () => {
       const inp = document.getElementById('agent-or-key');
       inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -3801,14 +3390,6 @@ const Agent = {
       if (e.target.files[0]) this.readDoc(e.target.files[0]);
     };
 
-    // Auto-fill token ao selecionar instância
-    document.getElementById('agent-instance-select').onchange = e => {
-      const saved = localStorage.getItem('token:' + e.target.value);
-      if (saved) document.getElementById('agent-token').value = saved;
-      document.getElementById('agent-instance-label').textContent = e.target.value ? '📱 ' + e.target.value : '';
-      this.checkInstanceConnection();
-    };
-
     document.getElementById('btn-refresh-convs').onclick = () => this.loadConversations();
 
     this.initPlaybookCards();
@@ -3821,10 +3402,8 @@ const Agent = {
   async loadUzapi() {
     try {
       const j = await fetch('/api/agent/uzapi-settings').then(r => r.json());
-      document.getElementById('uzapi-provider').value = j.waProvider || 'evolution';
       document.getElementById('uzapi-username').value = j.uzapiUsername || '';
       document.getElementById('uzapi-phoneid').value = j.uzapiPhoneId || '';
-      document.getElementById('uzapi-fields').style.display = j.waProvider === 'uzapi' ? '' : 'none';
       const tokStatus = document.getElementById('uzapi-token-status');
       tokStatus.textContent = j.hasToken ? '✓ Token salvo (deixe em branco para manter o atual).' : 'Nenhum token salvo ainda.';
       tokStatus.style.color = j.hasToken ? '#4ade80' : 'var(--text-3)';
@@ -3832,7 +3411,6 @@ const Agent = {
   },
 
   async saveUzapi() {
-    const waProvider = document.getElementById('uzapi-provider').value;
     const uzapiUsername = document.getElementById('uzapi-username').value.trim();
     const uzapiPhoneId = document.getElementById('uzapi-phoneid').value.trim();
     const uzapiToken = document.getElementById('uzapi-token').value.trim();
@@ -3840,11 +3418,11 @@ const Agent = {
     try {
       const r = await fetch('/api/agent/uzapi-settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waProvider, uzapiUsername, uzapiPhoneId, uzapiToken }),
+        body: JSON.stringify({ waProvider: 'uzapi', uzapiUsername, uzapiPhoneId, uzapiToken }),
       });
       if (!r.ok) throw new Error('Erro ao salvar');
       document.getElementById('uzapi-token').value = '';
-      UI.addBanner('info', '✓ Provedor de WhatsApp salvo' + (waProvider === 'uzapi' ? ' — Uzapi ativa.' : ' — Evolution API ativa.'));
+      UI.addBanner('info', '✓ Credenciais da Uzapi salvas.');
       this.loadUzapi();
     } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
     finally { btn.disabled = false; btn.textContent = '💾 Salvar'; }
