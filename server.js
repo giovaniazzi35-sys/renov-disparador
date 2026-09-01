@@ -2128,11 +2128,13 @@ async function parseContactFile(base64, format) {
 // ============================================================
 // GERADOR DE LEADS (segmento + região → lista via OpenStreetMap)
 // ============================================================
-const OVERPASS_URL  = 'https://overpass-api.de/api/interpreter';
+// Espelhos públicos do Overpass — o overpass-api.de sozinho costuma dar 504 sob carga
+const OVERPASS_URLS = ['https://overpass-api.de/api/interpreter', 'https://overpass.openstreetmap.fr/api/interpreter'];
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const OSM_UA = 'DoitSend-CRM/1.0 (uso interno - geracao de listas de prospeccao)';
 
-// Dicionário curto PT-BR → tags OSM comuns, pra ampliar a busca além do nome
+// Dicionário curto PT-BR → tags OSM comuns, pra ampliar a busca além do nome.
+// A checagem é por palavra contida no segmento digitado, não exata (ex: "loja de carro" casa com "carro").
 const SEGMENT_TAG_HINTS = {
   otica: ['optician'], oticas: ['optician'], oculista: ['optician'],
   restaurante: ['restaurant'], lanchonete: ['fast_food'],
@@ -2140,31 +2142,58 @@ const SEGMENT_TAG_HINTS = {
   mercado: ['supermarket', 'convenience'], supermercado: ['supermarket'],
   academia: ['fitness_centre'],
   salao: ['hairdresser'], barbearia: ['hairdresser'],
-  petshop: ['pet'], 'pet shop': ['pet'],
+  petshop: ['pet'], pet: ['pet'],
   imobiliaria: ['estate_agent'],
   contabilidade: ['accountant'], contador: ['accountant'],
   advocacia: ['lawyer'], advogado: ['lawyer'],
   clinica: ['clinic'], dentista: ['dentist'],
   hotel: ['hotel'], pousada: ['guest_house'],
   padaria: ['bakery'],
-  autoescola: ['driving_school'], 'auto escola': ['driving_school'],
-  oficina: ['car_repair'], concessionaria: ['car'],
+  autoescola: ['driving_school'],
+  oficina: ['car_repair'], concessionaria: ['car'], carro: ['car'], carros: ['car'],
+  veiculo: ['car'], veiculos: ['car', 'car_repair'], moto: ['motorcycle'], motos: ['motorcycle'],
+  pneu: ['tyres'], pneus: ['tyres'],
+  moveis: ['furniture'], eletronico: ['electronics'], eletronicos: ['electronics'],
+  roupa: ['clothes'], roupas: ['clothes'], loja: [],
 };
 
 function normalizeTxt(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
+function segmentTags(segment) {
+  const words = normalizeTxt(segment).split(/\s+/).filter(Boolean);
+  const tags = new Set();
+  words.forEach(w => (SEGMENT_TAG_HINTS[w] || []).forEach(t => tags.add(t)));
+  return [...tags];
+}
+
+// POST com retry — tenta cada espelho até 2x antes de desistir (o Overpass público
+// costuma responder 504 quando está sob carga; um retry simples resolve a maioria).
+async function fetchWithRetry(urls, options, attemptsPerUrl = 1, timeoutMs = 12000) {
+  let lastErr;
+  for (const url of urls) {
+    for (let i = 0; i < attemptsPerUrl; i++) {
+      try {
+        const r = await proxyFetch(url, { ...options, timeoutMs });
+        if (r.ok) return r;
+        lastErr = new Error(`HTTP ${r.status}`);
+      } catch (err) { lastErr = err; }
+    }
+  }
+  throw lastErr || new Error('Falha ao contatar o serviço.');
+}
+
 async function geocodeLocation(location) {
   const url = `${NOMINATIM_URL}?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(location)}`;
-  const r = await proxyFetch(url, { method: 'GET', headers: { 'User-Agent': OSM_UA } });
+  const r = await fetchWithRetry([url], { method: 'GET', headers: { 'User-Agent': OSM_UA } }, 2);
   const rows = await r.json();
   if (!Array.isArray(rows) || !rows.length) throw new Error('Localização não encontrada. Tente algo como "Curitiba, PR".');
   return { lat: parseFloat(rows[0].lat), lon: parseFloat(rows[0].lon) };
 }
 
 async function overpassSearch(lat, lon, radiusM, segment) {
-  const tagHints = SEGMENT_TAG_HINTS[normalizeTxt(segment)] || [];
+  const tagHints = segmentTags(segment);
   const nameRegex = segment.replace(/["\\]/g, '').trim();
   const tagFilters = tagHints.map(t =>
     `nwr["shop"="${t}"](around:${radiusM},${lat},${lon});nwr["amenity"="${t}"](around:${radiusM},${lat},${lon});nwr["office"="${t}"](around:${radiusM},${lat},${lon});`
@@ -2177,11 +2206,10 @@ async function overpassSearch(lat, lon, radiusM, segment) {
   ${tagFilters}
 );
 out center 300;`;
-  const r = await proxyFetch(OVERPASS_URL, {
+  const r = await fetchWithRetry(OVERPASS_URLS, {
     method: 'POST', headers: { 'Content-Type': 'text/plain', 'User-Agent': OSM_UA },
     body: 'data=' + encodeURIComponent(query),
-  });
-  if (!r.ok) throw new Error(`Overpass HTTP ${r.status}`);
+  }, 1, 12000);
   const j = await r.json();
   return Array.isArray(j.elements) ? j.elements : [];
 }
@@ -2205,21 +2233,27 @@ app.post('/api/leads/generate', requireAuth, async (req, res) => {
   if (!location) return res.status(400).json({ error: 'Informe a região (ex: Curitiba, PR).' });
   try {
     const { lat, lon } = await geocodeLocation(location);
-    const RADII = [5000, 10000, 20000, 40000];
+    const RADII = [5000, 15000, 40000];
     const found = new Map();
+    const deadline = Date.now() + 45000; // deixa folga sob o limite de 60s da função
     for (const radius of RADII) {
-      const elements = await overpassSearch(lat, lon, radius, segment);
-      elements.forEach(el => {
-        const lead = elementToLead(el);
-        if (!lead) return;
-        const key = lead.name.toLowerCase() + '|' + (lead.phone || el.id);
-        if (!found.has(key)) found.set(key, lead);
-      });
+      if (Date.now() > deadline) break;
+      try {
+        const elements = await overpassSearch(lat, lon, radius, segment);
+        elements.forEach(el => {
+          const lead = elementToLead(el);
+          if (!lead) return;
+          const key = lead.name.toLowerCase() + '|' + (lead.phone || el.id);
+          if (!found.has(key)) found.set(key, lead);
+        });
+      } catch (err) {
+        console.warn('[LEADS] Overpass falhou num raio, seguindo pro próximo:', err.message);
+      }
       if (found.size >= 50) break;
     }
     const leads = [...found.values()];
     if (!leads.length) {
-      return res.status(404).json({ error: 'Nenhum estabelecimento encontrado para esse segmento/região. Tente um termo mais simples ou uma região maior.' });
+      return res.status(404).json({ error: 'Nenhum estabelecimento encontrado para esse segmento/região (ou o serviço do OpenStreetMap está sobrecarregado no momento). Tente de novo em instantes, um termo mais simples ou uma região maior.' });
     }
 
     const owner = req.session.email;
