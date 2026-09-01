@@ -963,6 +963,26 @@
       <div id="lists-import-status" style="margin-top:12px;font-size:13px;color:var(--text-3)"></div>
     </div>
 
+    <div class="card" style="padding:20px;margin-bottom:18px">
+      <div class="card-title" style="font-size:15px">🔎 Gerar leads por segmento e região</div>
+      <div class="card-sub" style="margin-bottom:14px">Busca estabelecimentos reais (dados abertos OpenStreetMap) e monta uma lista de pelo menos 50 leads pra você baixar em CSV.</div>
+      <div class="manual-row">
+        <div>
+          <label class="field-label">Segmento</label>
+          <input type="text" id="leadgen-segment" placeholder="Ex: óticas, restaurantes, academias" />
+        </div>
+        <div>
+          <label class="field-label">Região</label>
+          <input type="text" id="leadgen-location" placeholder="Ex: Curitiba, PR" />
+        </div>
+        <div>
+          <label class="field-label">&nbsp;</label>
+          <button class="btn-primary" id="btn-leadgen-generate">🔎 Gerar leads</button>
+        </div>
+      </div>
+      <div id="leadgen-status" style="margin-top:10px;font-size:13px;color:var(--text-3)"></div>
+    </div>
+
     <div class="row-between" style="margin-bottom:14px">
       <div class="card-title" style="margin:0">Minhas listas</div>
       <button class="btn-ghost btn-sm" id="btn-lists-refresh">↺</button>
@@ -985,6 +1005,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn-ghost btn-sm" id="btn-list-send-disparador">📤 Enviar ao Disparador</button>
           <button class="btn-ghost btn-sm" id="btn-list-to-crm">📊 Importar como leads</button>
+          <button class="btn-ghost btn-sm" id="btn-list-download-csv">⬇ Baixar CSV</button>
           <button class="btn-ghost btn-sm" id="btn-list-delete" style="color:#f87171">🗑 Excluir lista</button>
         </div>
       </div>
@@ -3952,6 +3973,8 @@ const Lists = {
     wire('btn-list-delete', () => this.deleteCurrentList());
     wire('btn-list-send-disparador', () => this.sendToDisparador());
     wire('btn-list-to-crm', () => this.sendToCRM());
+    wire('btn-list-download-csv', () => this.downloadCurrentCsv());
+    wire('btn-leadgen-generate', () => this.generateLeads());
     const selAll = document.getElementById('list-select-all');
     if (selAll) selAll.onchange = () => {
       document.querySelectorAll('.list-item-check').forEach(cb => cb.checked = selAll.checked);
@@ -3996,7 +4019,7 @@ const Lists = {
       if (!this.lists.length) { grid.innerHTML = '<div class="crm-empty" style="grid-column:1/-1">Nenhuma lista importada ainda.</div>'; return; }
       grid.innerHTML = this.lists.map(l => `
         <div class="card" style="padding:16px;cursor:pointer" onclick="Lists.openDetail('${l.id}')">
-          <div style="font-size:24px;margin-bottom:6px">${l.source_format === 'pdf' ? '📄' : (l.source_format||'').includes('xls') ? '📊' : '📋'}</div>
+          <div style="font-size:24px;margin-bottom:6px">${l.source_format === 'leads' ? '🔎' : l.source_format === 'pdf' ? '📄' : (l.source_format||'').includes('xls') ? '📊' : '📋'}</div>
           <div style="font-weight:700;font-size:14px">${esc(l.name)}</div>
           <div class="card-sub" style="margin-top:4px">${l.total} contato(s) · ${new Date(l.created_at).toLocaleDateString('pt-BR')}</div>
         </div>`).join('');
@@ -4090,6 +4113,42 @@ const Lists = {
       if (typeof CRM !== 'undefined') CRM.load(true);
     } catch (err) { UI.addBanner('error', 'Erro ao importar: ' + err.message); }
     finally { btn.disabled = false; btn.textContent = '📊 Importar como leads'; }
+  },
+
+  // Baixa a lista aberta como CSV
+  downloadCurrentCsv() {
+    if (!this.currentListId) return;
+    window.open(`/api/lists/${this.currentListId}/csv`, '_blank');
+  },
+
+  // Gera uma nova lista de leads por segmento + região (dados abertos OpenStreetMap)
+  async generateLeads() {
+    const segment = document.getElementById('leadgen-segment').value.trim();
+    const location = document.getElementById('leadgen-location').value.trim();
+    const status = document.getElementById('leadgen-status');
+    const btn = document.getElementById('btn-leadgen-generate');
+    if (!segment) { status.style.color = '#f87171'; status.textContent = '✗ Informe o segmento.'; return; }
+    if (!location) { status.style.color = '#f87171'; status.textContent = '✗ Informe a região.'; return; }
+
+    btn.disabled = true; btn.textContent = '⏳ Buscando...';
+    status.style.color = 'var(--text-3)';
+    status.textContent = `⏳ Buscando "${segment}" em "${location}"... isso pode levar até 1 minuto.`;
+    try {
+      const r = await fetch('/api/leads/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segment, location }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      status.style.color = '#4ade80';
+      status.textContent = `✓ Lista "${j.list.name}" criada com ${j.total} lead(s) (${j.withPhone} com telefone).` +
+        (j.total < 50 ? ' Menos de 50 encontrados nessa região — tente ampliar a área ou o termo.' : '');
+      this.load();
+    } catch (err) {
+      status.style.color = '#f87171'; status.textContent = '✗ ' + err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = '🔎 Gerar leads';
+    }
   },
 };
 

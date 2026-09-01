@@ -2125,6 +2125,146 @@ async function parseContactFile(base64, format) {
   throw new Error('Formato de arquivo não suportado. Use CSV, XLSX, XLS ou PDF.');
 }
 
+// ============================================================
+// GERADOR DE LEADS (segmento + região → lista via OpenStreetMap)
+// ============================================================
+const OVERPASS_URL  = 'https://overpass-api.de/api/interpreter';
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const OSM_UA = 'DoitSend-CRM/1.0 (uso interno — geracao de listas de prospeccao)';
+
+// Dicionário curto PT-BR → tags OSM comuns, pra ampliar a busca além do nome
+const SEGMENT_TAG_HINTS = {
+  otica: ['optician'], oticas: ['optician'], oculista: ['optician'],
+  restaurante: ['restaurant'], lanchonete: ['fast_food'],
+  farmacia: ['pharmacy'],
+  mercado: ['supermarket', 'convenience'], supermercado: ['supermarket'],
+  academia: ['fitness_centre'],
+  salao: ['hairdresser'], barbearia: ['hairdresser'],
+  petshop: ['pet'], 'pet shop': ['pet'],
+  imobiliaria: ['estate_agent'],
+  contabilidade: ['accountant'], contador: ['accountant'],
+  advocacia: ['lawyer'], advogado: ['lawyer'],
+  clinica: ['clinic'], dentista: ['dentist'],
+  hotel: ['hotel'], pousada: ['guest_house'],
+  padaria: ['bakery'],
+  autoescola: ['driving_school'], 'auto escola': ['driving_school'],
+  oficina: ['car_repair'], concessionaria: ['car'],
+};
+
+function normalizeTxt(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
+async function geocodeLocation(location) {
+  const url = `${NOMINATIM_URL}?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(location)}`;
+  const r = await proxyFetch(url, { method: 'GET', headers: { 'User-Agent': OSM_UA } });
+  const rows = await r.json();
+  if (!Array.isArray(rows) || !rows.length) throw new Error('Localização não encontrada. Tente algo como "Curitiba, PR".');
+  return { lat: parseFloat(rows[0].lat), lon: parseFloat(rows[0].lon) };
+}
+
+async function overpassSearch(lat, lon, radiusM, segment) {
+  const tagHints = SEGMENT_TAG_HINTS[normalizeTxt(segment)] || [];
+  const nameRegex = segment.replace(/["\\]/g, '').trim();
+  const tagFilters = tagHints.map(t =>
+    `nwr["shop"="${t}"](around:${radiusM},${lat},${lon});nwr["amenity"="${t}"](around:${radiusM},${lat},${lon});nwr["office"="${t}"](around:${radiusM},${lat},${lon});`
+  ).join('\n  ');
+  const query = `[out:json][timeout:25];
+(
+  nwr["shop"]["name"~"${nameRegex}",i](around:${radiusM},${lat},${lon});
+  nwr["amenity"]["name"~"${nameRegex}",i](around:${radiusM},${lat},${lon});
+  nwr["office"]["name"~"${nameRegex}",i](around:${radiusM},${lat},${lon});
+  ${tagFilters}
+);
+out center 300;`;
+  const r = await proxyFetch(OVERPASS_URL, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain', 'User-Agent': OSM_UA },
+    body: 'data=' + encodeURIComponent(query),
+  });
+  if (!r.ok) throw new Error(`Overpass HTTP ${r.status}`);
+  const j = await r.json();
+  return Array.isArray(j.elements) ? j.elements : [];
+}
+
+function elementToLead(el) {
+  const tags = el.tags || {};
+  const name = (tags.name || '').trim();
+  if (!name) return null;
+  const phoneRaw = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || '';
+  const email = tags.email || tags['contact:email'] || '';
+  return { name, phone: normalizeNumber(phoneRaw), email };
+}
+
+// Gera uma lista de leads (nome/telefone/email) por segmento + região, usando dados
+// abertos do OpenStreetMap (Nominatim p/ geocodificar + Overpass p/ buscar estabelecimentos).
+app.post('/api/leads/generate', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const segment = (req.body?.segment || '').trim();
+  const location = (req.body?.location || '').trim();
+  if (!segment) return res.status(400).json({ error: 'Informe o segmento (ex: óticas, restaurantes).' });
+  if (!location) return res.status(400).json({ error: 'Informe a região (ex: Curitiba, PR).' });
+  try {
+    const { lat, lon } = await geocodeLocation(location);
+    const RADII = [5000, 10000, 20000, 40000];
+    const found = new Map();
+    for (const radius of RADII) {
+      const elements = await overpassSearch(lat, lon, radius, segment);
+      elements.forEach(el => {
+        const lead = elementToLead(el);
+        if (!lead) return;
+        const key = lead.name.toLowerCase() + '|' + (lead.phone || el.id);
+        if (!found.has(key)) found.set(key, lead);
+      });
+      if (found.size >= 50) break;
+    }
+    const leads = [...found.values()];
+    if (!leads.length) {
+      return res.status(404).json({ error: 'Nenhum estabelecimento encontrado para esse segmento/região. Tente um termo mais simples ou uma região maior.' });
+    }
+
+    const owner = req.session.email;
+    const listName = `${segment} — ${location}`.slice(0, 120);
+    const lr = await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_lists`, {
+      method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify({ owner, name: listName, source_format: 'leads', total: leads.length }),
+    });
+    const listRows = await lr.json();
+    if (!lr.ok) return res.status(lr.status).json({ error: listRows?.message || 'Erro ao criar lista' });
+    const list = Array.isArray(listRows) ? listRows[0] : listRows;
+
+    const items = leads.map(l => ({ list_id: list.id, owner, name: l.name, phone: l.phone || '', email: l.email || '' }));
+    for (let i = 0; i < items.length; i += 500) {
+      await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_list_items`, {
+        method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(items.slice(i, i + 500)),
+      });
+    }
+    res.json({ ok: true, list, total: leads.length, withPhone: leads.filter(l => l.phone).length });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
+// Baixa uma lista como CSV (nome,telefone,email)
+app.get('/api/lists/:id/csv', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  try {
+    const owner = encodeURIComponent(req.session.email);
+    const lr = await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_lists?id=eq.${req.params.id}&owner=eq.${owner}&select=name`, { method: 'GET', headers: SB_HEADERS });
+    const listRows = await lr.json();
+    const list = Array.isArray(listRows) ? listRows[0] : null;
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada.' });
+
+    const r = await proxyFetch(`${SUPABASE_URL}/rest/v1/contact_list_items?list_id=eq.${req.params.id}&owner=eq.${owner}&select=name,phone,email&order=created_at.asc&limit=5000`, { method: 'GET', headers: SB_HEADERS });
+    const rows = await r.json();
+    const items = Array.isArray(rows) ? rows : [];
+    const escCsv = (s) => `"${String(s || '').replace(/"/g, '""')}"`;
+    const csv = ['nome,telefone,email', ...items.map(it => `${escCsv(it.name)},${escCsv(it.phone)},${escCsv(it.email)}`)].join('\n');
+    const filename = (list.name || 'lista').replace(/[^\w\- ]+/g, '').trim() || 'lista';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`);
+    res.send('\uFEFF' + csv);
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 // Importa um arquivo e cria uma nova lista de contatos
 app.post('/api/lists/import', requireAuth, async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
