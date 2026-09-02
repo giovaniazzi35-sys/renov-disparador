@@ -2227,13 +2227,33 @@ async function overpassSearch(lat, lon, radiusM, segment) {
   return Array.isArray(j.elements) ? j.elements : [];
 }
 
+// Só celular pode ter WhatsApp — valida o formato BR (DDI 55 + DDD + 9 + 8 dígitos = 13 no total).
+function isLikelyMobileBR(digits) {
+  if (digits.length !== 13 || !digits.startsWith('55')) return false;
+  const ddd = parseInt(digits.slice(2, 4), 10);
+  return ddd >= 11 && ddd <= 99 && digits[4] === '9';
+}
+
+// Extrai o primeiro número de celular válido de um campo que pode ter vários
+// telefones separados por ";", "," ou "/" (comum em dados do OSM).
+function firstMobilePhone(...rawFields) {
+  for (const raw of rawFields) {
+    if (!raw) continue;
+    for (const candidate of String(raw).split(/[;,/]/)) {
+      const normalized = normalizeNumber(candidate.trim());
+      if (isLikelyMobileBR(normalized)) return normalized;
+    }
+  }
+  return '';
+}
+
 function elementToLead(el) {
   const tags = el.tags || {};
   const name = (tags.name || '').trim();
   if (!name) return null;
-  const phoneRaw = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || '';
+  const phone = firstMobilePhone(tags['contact:mobile'], tags.phone, tags['contact:phone']);
   const email = tags.email || tags['contact:email'] || '';
-  return { name, phone: normalizeNumber(phoneRaw), email };
+  return { name, phone, email };
 }
 
 // Gera uma lista de leads (nome/telefone/email) por segmento + região, usando dados
