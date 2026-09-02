@@ -1697,6 +1697,46 @@ app.post('/api/crm/leads', requireAuth, async (req, res) => {
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
+// Adiciona vários contatos ao CRM de uma vez numa etapa (ex: após um disparo →
+// "msg_enviada"). Pula quem já existe no CRM (por telefone) pra não sobrescrever
+// o progresso de leads que já avançaram no pipeline.
+app.post('/api/crm/leads/bulk-add', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });
+  const contacts = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
+  const stage = CRM_STAGES.includes(req.body?.stage) ? req.body.stage : 'msg_enviada';
+  if (!contacts.length) return res.json({ ok: true, added: 0 });
+  try {
+    const owner = req.session.email;
+    const ownerQ = encodeURIComponent(owner);
+    const existingR = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads?owner=eq.${ownerQ}&select=phone`, { method: 'GET', headers: SB_HEADERS });
+    const existingRows = await existingR.json();
+    const existingPhones = new Set((Array.isArray(existingRows) ? existingRows : []).map(r => r.phone));
+
+    const seen = new Set();
+    const now = new Date().toISOString();
+    const leads = contacts
+      .map(c => ({ name: (c.name || '').trim(), phone: String(c.phone || '').replace(/\D/g, '') }))
+      .filter(c => c.phone && !existingPhones.has(c.phone) && !seen.has(c.phone) && seen.add(c.phone))
+      .map(c => ({
+        owner, name: c.name, phone: c.phone, stage, tags: [], notes: '',
+        value: 0, source: 'disparador',
+        last_activity: now, updated_at: now,
+      }));
+    if (!leads.length) return res.json({ ok: true, added: 0 });
+
+    let added = 0;
+    for (let i = 0; i < leads.length; i += 500) {
+      const batch = leads.slice(i, i + 500);
+      const ir = await proxyFetch(`${SUPABASE_URL}/rest/v1/crm_leads`, {
+        method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(batch),
+      });
+      if (ir.ok) added += batch.length;
+    }
+    res.json({ ok: true, added });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 // Atualiza um lead (etapa, nome, tags, notas, valor…)
 app.patch('/api/crm/leads/:id', requireAuth, async (req, res) => {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Banco indisponível' });

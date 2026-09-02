@@ -6,25 +6,25 @@
   <title>DOIT SEND</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:          #080810;
-      --card:        #10111e;
-      --card2:       #161828;
-      --border:      #252840;
-      --accent:      #2dd4bf;
-      --accent-dim:  #14b8a6;
-      --accent-glow: rgba(45,212,191,0.18);
+      --bg:          #0a0e17;
+      --card:        #111827;
+      --card2:       #171f2e;
+      --border:      rgba(107,114,128,0.28);
+      --accent:      #6b7280;
+      --accent-dim:  #4b5563;
+      --accent-glow: rgba(107,114,128,0.18);
       --accent2:     #ef4444;
       --red:         #ef4444;
       --red-dim:     #dc2626;
       --yellow:      #f59e0b;
       --blue:        #3b82f6;
       --blue-glow:   rgba(59,130,246,0.15);
-      --text:        #f1f5f9;
-      --text-2:      #94a3b8;
+      --text:        #f3f4f6;
+      --text-2:      #9ca3af;
       --text-3:      #475569;
       --radius:      16px;
       --radius-sm:   10px;
@@ -36,7 +36,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
       font-size: 14px;
       line-height: 1.6;
       min-height: 100vh;
@@ -56,18 +56,18 @@
     }
     .blob-1 {
       width: 600px; height: 500px; top: -150px; right: -100px;
-      background: radial-gradient(circle, #2dd4bf 0%, #06b6d4 60%, transparent 100%);
+      background: radial-gradient(circle, #6b7280 0%, #94a3b8 60%, transparent 100%);
       animation: blobFloat1 18s ease-in-out infinite;
     }
     .blob-2 {
       width: 500px; height: 450px; bottom: -100px; left: -80px;
-      background: radial-gradient(circle, #14b8a6 0%, #dc2626 70%, transparent 100%);
+      background: radial-gradient(circle, #4b5563 0%, #dc2626 70%, transparent 100%);
       animation: blobFloat2 22s ease-in-out infinite;
       opacity: 0.13;
     }
     .blob-3 {
       width: 300px; height: 300px; top: 40%; left: 50%;
-      background: radial-gradient(circle, #2dd4bf 0%, transparent 70%);
+      background: radial-gradient(circle, #6b7280 0%, transparent 70%);
       animation: blobFloat3 15s ease-in-out infinite;
       opacity: 0.08;
     }
@@ -102,7 +102,7 @@
       background: #fff;
       border-radius: 14px;
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 0 1px rgba(45,212,191,0.3), 0 8px 32px rgba(45,212,191,0.25), 0 0 60px rgba(45,212,191,0.12);
+      box-shadow: 0 0 0 1px rgba(107,114,128,0.3), 0 8px 32px rgba(107,114,128,0.25), 0 0 60px rgba(107,114,128,0.12);
       flex-shrink: 0; overflow: hidden; padding: 6px;
     }
     .header-logo svg { width: 100%; height: 100%; }
@@ -116,11 +116,11 @@
     /* ── Logout chip ── */
     .header-actions { margin-left: auto; }
     .btn-logout {
-      background: rgba(45,212,191,0.1); border: 1px solid rgba(45,212,191,0.2);
+      background: rgba(107,114,128,0.1); border: 1px solid rgba(107,114,128,0.2);
       color: var(--text-2); font-size: 12px; padding: 6px 14px; border-radius: 20px;
       cursor: pointer; transition: all 0.15s; font-family: inherit; font-weight: 500;
     }
-    .btn-logout:hover { background: rgba(45,212,191,0.18); color: var(--text); }
+    .btn-logout:hover { background: rgba(107,114,128,0.18); color: var(--text); }
 
     /* ── Stepper ── */
     .stepper {
@@ -152,13 +152,13 @@
       width: 0%; background: linear-gradient(90deg, var(--accent-dim), var(--accent)); transition: width 0.5s ease;
     }
     .step-item.active .step-bubble {
-      border-color: var(--accent); background: rgba(45,212,191,0.12);
-      color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow), 0 0 20px rgba(45,212,191,0.2);
+      border-color: var(--accent); background: rgba(107,114,128,0.12);
+      color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow), 0 0 20px rgba(107,114,128,0.2);
     }
     .step-item.active .step-label { color: var(--accent); }
     .step-item.done .step-bubble {
       border-color: var(--accent); background: linear-gradient(135deg, var(--accent), var(--accent-dim)); color: #fff;
-      box-shadow: 0 4px 12px rgba(45,212,191,0.35);
+      box-shadow: 0 4px 12px rgba(107,114,128,0.35);
     }
     .step-item.done .step-bubble::after { content: '✓'; font-size: 16px; }
     .step-item.done .step-bubble span { display: none; }
@@ -180,7 +180,7 @@
     }
     .card::before {
       content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(45,212,191,0.3), transparent);
+      background: linear-gradient(90deg, transparent, rgba(107,114,128,0.3), transparent);
     }
     .card-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.3px; }
     .card-sub { font-size: 13px; color: var(--text-2); margin-bottom: 24px; line-height: 1.6; }
@@ -228,11 +228,11 @@
     button:disabled { opacity: 0.35; cursor: not-allowed; }
     .btn-primary {
       background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-      color: #fff; box-shadow: 0 4px 16px rgba(45,212,191,0.3);
+      color: #fff; box-shadow: 0 4px 16px rgba(107,114,128,0.3);
     }
     .btn-primary:hover:not(:disabled) {
       background: linear-gradient(135deg, #fb923c, var(--accent));
-      box-shadow: 0 6px 24px rgba(45,212,191,0.45); transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(107,114,128,0.45); transform: translateY(-1px);
     }
     .btn-secondary { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
     .btn-secondary:hover:not(:disabled) { background: var(--accent-glow); }
@@ -281,7 +281,7 @@
       background: var(--card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 36px; text-align: center;
       max-width: 380px; width: 90%;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(45,212,191,0.1);
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(107,114,128,0.1);
       animation: slideUp 0.25s cubic-bezier(.22,.68,0,1.2);
     }
     @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -311,7 +311,7 @@
       padding: 7px 18px; font-size: 13px; border-radius: 6px;
       transition: all 0.18s; font-weight: 600; border: none;
     }
-    .tab-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-dim)); color: #fff; box-shadow: 0 2px 10px rgba(45,212,191,0.3); }
+    .tab-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-dim)); color: #fff; box-shadow: 0 2px 10px rgba(107,114,128,0.3); }
     .tab-btn:hover:not(.active) { background: var(--card2); color: var(--text); }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
@@ -446,7 +446,7 @@
     .time-picker input[type=number]:focus { border-color:var(--accent); }
     .tp-sep { font-size:22px; font-weight:700; color:var(--text-3); }
     .tp-label { font-size:11px; color:var(--text-2); font-weight:600; }
-    .delay-rate-box { display:flex; align-items:center; gap:10px; padding:12px 16px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.15); border-radius:var(--radius-sm); font-size:13px; margin-top:16px; }
+    .delay-rate-box { display:flex; align-items:center; gap:10px; padding:12px 16px; background:rgba(107,114,128,.06); border:1px solid rgba(107,114,128,.15); border-radius:var(--radius-sm); font-size:13px; margin-top:16px; }
     /* ── WhatsApp Preview ── */
     .wa-preview { background:#0b141a; border-radius:14px; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; margin-top:16px; border:1px solid rgba(255,255,255,.07); }
     .wa-header { background:#202c33; padding:10px 16px; display:flex; align-items:center; gap:12px; }
@@ -474,7 +474,7 @@
     .conn-phone-num { font-size:13px; color:var(--accent); font-weight:600; font-family:monospace; }
     .conn-btns { display:flex; gap:8px; flex-wrap:wrap; }
     /* ── Último contato ── */
-    .last-contact-box { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.2); border-radius:var(--radius-sm); font-size:12px; margin-top:8px; flex-wrap:wrap; }
+    .last-contact-box { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(107,114,128,.06); border:1px solid rgba(107,114,128,.2); border-radius:var(--radius-sm); font-size:12px; margin-top:8px; flex-wrap:wrap; }
     .lc-label { color:var(--text-3); font-size:11px; white-space:nowrap; }
     .lc-name { font-weight:700; color:var(--text); }
     .lc-phone { color:var(--text-2); font-family:monospace; font-size:11px; }
@@ -518,7 +518,7 @@
       background: linear-gradient(90deg, var(--accent-dim), var(--accent), #fb923c);
       background-size: 200% 100%;
       border-radius: 6px; width: 0%; transition: width 0.4s ease;
-      box-shadow: 0 0 10px rgba(45,212,191,0.5);
+      box-shadow: 0 0 10px rgba(107,114,128,0.5);
       animation: shimmer 2s linear infinite;
     }
     @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
@@ -545,7 +545,7 @@
       border-radius: var(--radius-sm); padding: 18px; text-align: center;
       transition: border-color 0.2s;
     }
-    .sum-item.sent { border-color: rgba(45,212,191,0.3); }
+    .sum-item.sent { border-color: rgba(107,114,128,0.3); }
     .sum-item.errors { border-color: rgba(239,68,68,0.3); }
     .sum-val { font-size: 30px; font-weight: 900; line-height: 1; margin-bottom: 6px; }
     .sum-item.sent .sum-val { color: var(--accent); }
@@ -559,7 +559,7 @@
     /* ── Banners ── */
     .banner { display: flex; gap: 10px; align-items: flex-start; padding: 13px 16px; border-radius: var(--radius-sm); margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
     .banner.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
-    .banner.warning { background: rgba(45,212,191,0.1); border: 1px solid rgba(45,212,191,0.3); color: #fdba74; }
+    .banner.warning { background: rgba(107,114,128,0.1); border: 1px solid rgba(107,114,128,0.3); color: #fdba74; }
     .banner.info { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #93c5fd; }
     .banner code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
     .inline-err { font-size: 12px; color: var(--red); margin-top: 7px; }
@@ -576,8 +576,8 @@
 
     /* ── Connect section ── */
     .connect-section {
-      background: linear-gradient(135deg, rgba(45,212,191,0.06), rgba(239,68,68,0.04));
-      border: 1.5px solid rgba(45,212,191,0.2);
+      background: linear-gradient(135deg, rgba(107,114,128,0.06), rgba(239,68,68,0.04));
+      border: 1.5px solid rgba(107,114,128,0.2);
       border-radius: var(--radius-sm); padding: 16px; margin-top: 16px;
     }
     .connect-section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent); margin-bottom: 12px; }
@@ -622,7 +622,7 @@
     .agent-badge.off { background:rgba(100,116,139,.12); color:var(--text-3); border:1px solid var(--border); }
     .agent-badge::before { content:'●'; }
     .btn-toggle-agent { padding:8px 20px; border-radius:var(--radius-sm); font-size:13px; font-weight:700; border:none; cursor:pointer; font-family:inherit; transition:all .2s; }
-    .btn-toggle-agent.activate { background:linear-gradient(135deg,var(--accent),var(--accent-dim)); color:#fff; box-shadow:0 4px 16px rgba(45,212,191,.3); }
+    .btn-toggle-agent.activate { background:linear-gradient(135deg,var(--accent),var(--accent-dim)); color:#fff; box-shadow:0 4px 16px rgba(107,114,128,.3); }
     .btn-toggle-agent.deactivate { background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#f87171; }
     .agent-instance-label { font-size:12px; color:var(--text-3); margin-left:auto; }
     .agent-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-3); margin-bottom:10px; margin-top:20px; }
@@ -636,7 +636,7 @@
     /* Playbook cards do agente */
     .agent-pb-card { display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--border);border-radius:12px;cursor:pointer;transition:all .18s;background:var(--card2);position:relative; }
     .agent-pb-card:hover { border-color:var(--accent);background:var(--accent-glow); }
-    .agent-pb-card.selected { border-color:var(--accent);background:rgba(45,212,191,.07); }
+    .agent-pb-card.selected { border-color:var(--accent);background:rgba(107,114,128,.07); }
     .agent-pb-card.selected::after { content:'✓';position:absolute;top:10px;right:12px;color:var(--accent);font-size:16px;font-weight:900; }
     .agent-pb-icon { font-size:28px;line-height:1; }
     .agent-pb-name { font-weight:800;font-size:14px;color:var(--text); }
@@ -649,8 +649,8 @@
     .toggle-switch::after { content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s; }
     .toggle-label input:checked + .toggle-switch { background:var(--accent); }
     .toggle-label input:checked + .toggle-switch::after { transform:translateX(16px); }
-    .webhook-url-box { background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.2); border-radius:var(--radius-sm); padding:10px 14px; font-family:monospace; font-size:12px; color:var(--accent); word-break:break-all; cursor:pointer; transition:background .15s; }
-    .webhook-url-box:hover { background:rgba(45,212,191,.12); }
+    .webhook-url-box { background:rgba(107,114,128,.06); border:1px solid rgba(107,114,128,.2); border-radius:var(--radius-sm); padding:10px 14px; font-family:monospace; font-size:12px; color:var(--accent); word-break:break-all; cursor:pointer; transition:background .15s; }
+    .webhook-url-box:hover { background:rgba(107,114,128,.12); }
     .agent-doc-zone { border:2px dashed var(--border); border-radius:var(--radius-sm); padding:24px; text-align:center; cursor:pointer; transition:all .2s; position:relative; background:var(--bg); }
     .agent-doc-zone:hover { border-color:var(--accent); background:var(--accent-glow); }
     .agent-doc-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
@@ -673,7 +673,7 @@
     #panel-crm { padding-top: 4px; }
     .crm-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
     .crm-stat { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; position:relative; }
-    .crm-stat-ico { position:absolute; top:16px; right:16px; width:34px; height:34px; border-radius:10px; background:rgba(45,212,191,.1); display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .crm-stat-ico { position:absolute; top:16px; right:16px; width:34px; height:34px; border-radius:10px; background:rgba(107,114,128,.1); display:flex; align-items:center; justify-content:center; font-size:16px; }
     .crm-stat-val { font-size:26px; font-weight:800; color:var(--text); letter-spacing:-.5px; margin-top:8px; }
     .crm-stat-lbl { font-size:13px; color:var(--text-2); margin-top:4px; font-weight:600; }
     .crm-stat-sub { font-size:11px; color:var(--text-3); margin-top:3px; }
@@ -717,7 +717,7 @@
     .crm-card-phone { font-size:12px; color:var(--text-2); }
     .crm-card-meta { display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:6px; }
     .crm-card-tags { display:flex; gap:4px; flex-wrap:wrap; }
-    .crm-tag { font-size:10px; font-weight:700; padding:1px 8px; border-radius:99px; background:rgba(45,212,191,.12); color:var(--accent); }
+    .crm-tag { font-size:10px; font-weight:700; padding:1px 8px; border-radius:99px; background:rgba(107,114,128,.12); color:var(--accent); }
     .crm-card-val { font-size:11px; font-weight:800; color:#4ade80; white-space:nowrap; }
     .crm-empty { font-size:12px; color:var(--text-3); text-align:center; padding:14px 4px; }
     @media (max-width:720px){ .crm-stats{grid-template-columns:repeat(2,1fr);} }
@@ -884,6 +884,13 @@
           <button class="btn-primary btn-sm" id="btn-crm-add">＋ Novo lead</button>
         </div>
       </div>
+      <div class="row-between hidden" id="crm-bulk-bar" style="margin-bottom:12px;padding:8px 14px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px">
+        <span class="card-sub" style="margin:0" id="crm-bulk-count">0 selecionado(s)</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost btn-sm" id="btn-crm-bulk-clear">Limpar seleção</button>
+          <button class="btn-ghost btn-sm" id="btn-crm-bulk-delete" style="color:#f87171">🗑 Excluir selecionados</button>
+        </div>
+      </div>
       <div class="crm-board" id="crm-board"></div>
     </div>
 
@@ -1009,6 +1016,7 @@
           <button class="btn-ghost btn-sm" id="btn-list-send-disparador">📤 Enviar ao Disparador</button>
           <button class="btn-ghost btn-sm" id="btn-list-to-crm">📊 Importar como leads</button>
           <button class="btn-ghost btn-sm" id="btn-list-download-csv">⬇ Baixar CSV</button>
+          <button class="btn-ghost btn-sm" id="btn-list-delete-selected" style="color:#f87171">🗑 Excluir selecionados</button>
           <button class="btn-ghost btn-sm" id="btn-list-delete" style="color:#f87171">🗑 Excluir lista</button>
         </div>
       </div>
@@ -2403,6 +2411,7 @@ const Dispatch = {
     const total = contacts.length;
     let interrupted = false;
     let consecutiveInstanceErrors = 0;
+    const sentContacts = [];
 
     const mediaOn = document.getElementById('toggle-media').checked;
     const activeMedia = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url' && m.url.trim()) || (m.mode==='upload' && m.base64)) : [];
@@ -2443,6 +2452,7 @@ const Dispatch = {
         sent++;
         consecutiveInstanceErrors = 0;
         Log.append(contact, 'success');
+        sentContacts.push({ name: contact.name, phone: contact.phone });
         if (window._saveLastContact) window._saveLastContact(token, contact);
       } else {
         errors++;
@@ -2491,6 +2501,18 @@ const Dispatch = {
     document.getElementById('dispatch-title').textContent = interrupted ? 'Disparo interrompido' : 'Disparo concluído! ✓';
     document.getElementById('dispatch-sub').textContent = `${sent} mensagem(ns) enviada(s) com sucesso.`;
     AppState.stopRequested = false;
+
+    // Adiciona todos os contatos que receberam a mensagem ao CRM, na etapa "Mensagem enviada"
+    if (sentContacts.length) {
+      try {
+        const r = await fetch('/api/crm/leads/bulk-add', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contacts: sentContacts, stage: 'msg_enviada' }),
+        });
+        const j = await r.json();
+        if (j.ok && j.added) Log.appendSystem(`${j.added} contato(s) adicionado(s) ao CRM em "Mensagem enviada".`);
+      } catch (_) {}
+    }
   }
 };
 
@@ -3541,7 +3563,7 @@ const CRM = {
     { key:'novo',        label:'Novo',            color:'#60a5fa' },
     { key:'msg_enviada', label:'Mensagem enviada',color:'#818cf8' },
     { key:'respondeu',   label:'Respondeu',       color:'#a78bfa' },
-    { key:'qualificado', label:'Qualificado',     color:'#2dd4bf' },
+    { key:'qualificado', label:'Qualificado',     color:'#6b7280' },
     { key:'reuniao',     label:'Reunião',         color:'#fbbf24' },
     { key:'proposta',    label:'Proposta enviada',color:'#fb923c' },
     { key:'negociacao',  label:'Negociação',      color:'#f472b6' },
@@ -3564,6 +3586,8 @@ const CRM = {
     wire('btn-crm-add2', () => this.openLead(null));
     wire('btn-crm-refresh', () => this.load(true));
     wire('btn-crm-import', () => this.importFromAgent());
+    wire('btn-crm-bulk-clear', () => this.clearSelection());
+    wire('btn-crm-bulk-delete', () => this.deleteSelected());
     wire('crm-f-cancel', () => this.closeModal());
     wire('crm-modal-close', () => this.closeModal());
     wire('crm-f-save', () => this.save());
@@ -3629,10 +3653,10 @@ const CRM = {
     const area = line + ` L ${pad+ (meses.length-1)*step} ${H-pad} L ${pad} ${H-pad} Z`;
     const labels = meses.map((m,i) => `<text x="${pad+i*step}" y="${H-8}" text-anchor="middle" fill="#475569" font-size="10">${m.label}</text>`).join('');
     box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">
-      <defs><linearGradient id="revg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2dd4bf" stop-opacity=".35"/><stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="revg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b7280" stop-opacity=".35"/><stop offset="1" stop-color="#6b7280" stop-opacity="0"/></linearGradient></defs>
       <path d="${area}" fill="url(#revg)"/>
-      <path d="${line}" fill="none" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      ${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#2dd4bf"/>`).join('')}
+      <path d="${line}" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#6b7280"/>`).join('')}
       ${labels}</svg>`;
   },
 
@@ -3693,15 +3717,59 @@ const CRM = {
   _card(l) {
     const c = document.createElement('div');
     c.className = 'crm-card'; c.draggable = true;
+    c.style.position = 'relative';
     const tags = (l.tags||[]).slice(0,3).map(t => `<span class="crm-tag">${esc(t)}</span>`).join('');
     const val = Number(l.value)>0 ? `<span class="crm-card-val">${this.brl(l.value)}</span>` : '';
-    c.innerHTML = `<div class="crm-card-name">${esc(l.name || l.company || l.phone || 'Sem nome')}</div>
+    const checked = this.selectedIds.has(l.id) ? 'checked' : '';
+    c.innerHTML = `<input type="checkbox" class="crm-card-check" ${checked} style="position:absolute;top:8px;right:8px;z-index:2" />
+      <div class="crm-card-name" style="padding-right:22px">${esc(l.name || l.company || l.phone || 'Sem nome')}</div>
       ${l.company ? `<div class="crm-card-phone">🏢 ${esc(l.company)}</div>` : (l.phone ? `<div class="crm-card-phone">📱 ${esc(l.phone)}</div>` : '')}
       <div class="crm-card-meta"><div class="crm-card-tags">${tags}</div>${val}</div>`;
     c.addEventListener('dragstart', e => { e.dataTransfer.setData('text/id', l.id); c.classList.add('dragging'); });
     c.addEventListener('dragend', () => c.classList.remove('dragging'));
+    const check = c.querySelector('.crm-card-check');
+    check.addEventListener('click', e => e.stopPropagation());
+    check.addEventListener('change', () => {
+      if (check.checked) this.selectedIds.add(l.id); else this.selectedIds.delete(l.id);
+      this.updateBulkBar();
+    });
     c.addEventListener('click', () => this.openLead(l));
     return c;
+  },
+
+  selectedIds: new Set(),
+
+  updateBulkBar() {
+    const bar = document.getElementById('crm-bulk-bar');
+    const count = document.getElementById('crm-bulk-count');
+    if (!bar || !count) return;
+    const n = this.selectedIds.size;
+    bar.classList.toggle('hidden', n === 0);
+    count.textContent = n + ' selecionado(s)';
+  },
+
+  clearSelection() {
+    this.selectedIds.clear();
+    this.updateBulkBar();
+    document.querySelectorAll('.crm-card-check').forEach(cb => cb.checked = false);
+  },
+
+  async deleteSelected() {
+    const ids = [...this.selectedIds];
+    if (!ids.length) return;
+    if (!confirm(`Excluir ${ids.length} lead(s) selecionado(s)? Essa ação não pode ser desfeita.`)) return;
+    const btn = document.getElementById('btn-crm-bulk-delete');
+    btn.disabled = true; btn.textContent = '⏳ Excluindo...';
+    try {
+      await Promise.all(ids.map(id => fetch('/api/crm/leads/' + id, { method: 'DELETE' })));
+      this.leads = this.leads.filter(l => !ids.includes(l.id));
+      this.selectedIds.clear();
+      this.renderBoard();
+      this.updateBulkBar();
+      await this.refreshStats();
+      UI.addBanner('info', `✓ ${ids.length} lead(s) excluído(s).`);
+    } catch (err) { UI.addBanner('error', 'Erro ao excluir selecionados: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = '🗑 Excluir selecionados'; }
   },
 
   renderTable() {
@@ -3979,6 +4047,7 @@ const Lists = {
     wire('btn-lists-refresh', () => this.load());
     wire('list-detail-close', () => this.closeDetail());
     wire('btn-list-delete', () => this.deleteCurrentList());
+    wire('btn-list-delete-selected', () => this.deleteSelected());
     wire('btn-list-send-disparador', () => this.sendToDisparador());
     wire('btn-list-to-crm', () => this.sendToCRM());
     wire('btn-list-download-csv', () => this.downloadCurrentCsv());
@@ -4087,6 +4156,22 @@ const Lists = {
       this.currentItems = this.currentItems.filter(it => it.id !== itemId);
       this.renderItems();
     } catch (err) { UI.addBanner('error', 'Erro ao remover: ' + err.message); }
+  },
+
+  // Remove todos os contatos marcados de uma vez
+  async deleteSelected() {
+    const ids = this.getSelectedIds();
+    if (!ids.length) { UI.addBanner('warning', 'Selecione ao menos um contato.'); return; }
+    if (!confirm(`Remover ${ids.length} contato(s) selecionado(s) da lista?`)) return;
+    const btn = document.getElementById('btn-list-delete-selected');
+    btn.disabled = true; btn.textContent = '⏳ Removendo...';
+    try {
+      await Promise.all(ids.map(id => fetch(`/api/lists/${this.currentListId}/items/${id}`, { method: 'DELETE' })));
+      this.currentItems = this.currentItems.filter(it => !ids.includes(it.id));
+      this.renderItems();
+      UI.addBanner('info', `✓ ${ids.length} contato(s) removido(s).`);
+    } catch (err) { UI.addBanner('error', 'Erro ao remover selecionados: ' + err.message); }
+    finally { btn.disabled = false; btn.textContent = '🗑 Excluir selecionados'; }
   },
 
   async deleteCurrentList() {
