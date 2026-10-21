@@ -1886,6 +1886,37 @@ const API = {
 };
 
 // ============================================================
+// UPLOAD DE MÍDIA — o arquivo vai direto do navegador pro armazenamento (sem passar pelo
+// servidor, que no Vercel recusa corpo acima de ~4,5 MB). O disparo manda só o link.
+// ============================================================
+const MEDIA_MAX_MB = 30;
+const MediaUpload = {
+  async upload(file, onProgress) {
+    const sign = await fetch('/api/media/sign', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, size: file.size }),
+    });
+    const info = await sign.json().catch(() => ({}));
+    if (!sign.ok || !info.uploadUrl) throw new Error(info.error || `HTTP ${sign.status}`);
+    await new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('cacheControl', '3600');
+      form.append('', file);
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', info.uploadUrl);
+      xhr.setRequestHeader('x-upsert', 'false');
+      xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100)); };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+        ? resolve()
+        : reject(new Error(`o armazenamento recusou o arquivo (HTTP ${xhr.status}) ${String(xhr.responseText || '').slice(0, 120)}`));
+      xhr.onerror = () => reject(new Error('falha de conexão durante o upload'));
+      xhr.send(form);
+    });
+    return info.publicUrl;
+  },
+};
+
+// ============================================================
 // STEPPER
 // ============================================================
 const Stepper = {
@@ -1915,7 +1946,7 @@ const Stepper = {
     const maxV = document.getElementById('delay-max').value;
     document.getElementById('pre-delay').textContent = `${Delay._fmt(parseInt(minV)||0)} – ${Delay._fmt(parseInt(maxV)||0)}`;
     const mediaOn = document.getElementById('toggle-media').checked;
-    const activeCount = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url'&&m.url.trim())||(m.mode==='upload'&&m.base64)).length : 0;
+    const activeCount = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url'&&m.url.trim())||(m.mode==='upload'&&(m.fileUrl||m.base64))).length : 0;
     document.getElementById('pre-media').textContent = activeCount ? `${activeCount} arquivo(s)` : 'Nenhuma';
   }
 };
@@ -2272,7 +2303,7 @@ function translateError(msg) {
   if (m.includes('timeout') || m.includes('timed out') || m.includes('econnreset') || m.includes('econnrefused'))
     return 'Tempo esgotado — instância pode estar desconectada';
   if (m.includes('socket hang up') || m.includes('enotfound'))
-    return 'Servidor inacessível — verifique a URL da Evolution';
+    return 'Servidor inacessível — verifique a conexão';
 
   if (m.includes('invalid token') || m.includes('unauthorized') || m.includes('forbidden') || m.includes('apikey'))
     return 'Token inválido ou sem permissão';
@@ -2299,7 +2330,8 @@ function translateError(msg) {
 
   if (msg === 'HTTP 400') return 'Requisição inválida (400)';
   if (msg === 'HTTP 408' || msg === 'HTTP 504') return 'Tempo esgotado — instância pode estar desconectada';
-  if (msg === 'HTTP 500') return 'Erro interno no servidor da Evolution';
+  if (msg === 'HTTP 413') return 'Arquivo grande demais para o servidor';
+  if (msg === 'HTTP 500') return 'Erro interno no servidor';
   if (msg === 'HTTP 502' || msg === 'HTTP 503') return 'Servidor temporariamente indisponível';
   if (/^HTTP \d{3}$/.test(msg)) return `Erro do servidor (${msg.split(' ')[1]})`;
 
@@ -2371,6 +2403,7 @@ const Dispatch = {
     if (!token) { errEl.textContent = 'Uzapi não conectada. Configure suas credenciais na aba Agente.'; errEl.classList.remove('hidden'); return; }
     if (!AppState.contacts.length) { errEl.textContent = 'Nenhum contato.'; errEl.classList.remove('hidden'); return; }
     if (!Message.getActive().length) { errEl.textContent = 'Mensagem vazia.'; errEl.classList.remove('hidden'); return; }
+    if (AppState.mediaItems.some(m => m._uploading)) { errEl.textContent = 'Aguarde o upload do arquivo terminar antes de disparar.'; errEl.classList.remove('hidden'); return; }
 
     const { minMs, maxMs } = Delay.getValues();
     AppState.stopRequested = false;
@@ -2393,7 +2426,7 @@ const Dispatch = {
     const sentContacts = [];
 
     const mediaOn = document.getElementById('toggle-media').checked;
-    const activeMedia = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url' && m.url.trim()) || (m.mode==='upload' && m.base64)) : [];
+    const activeMedia = mediaOn ? AppState.mediaItems.filter(m => (m.mode==='url' && m.url.trim()) || (m.mode==='upload' && (m.fileUrl || m.base64))) : [];
 
     document.getElementById('btn-start').classList.add('hidden');
     document.getElementById('btn-stop').classList.remove('hidden');
@@ -2412,17 +2445,24 @@ const Dispatch = {
       let result;
 
       if (activeMedia.length > 0) {
-        // Envia texto primeiro (se houver), depois cada mídia
-        if (text) await API.sendText(token, contact.phone, text);
-        let lastResult = { ok: true };
-        for (const m of activeMedia) {
-          if (m.mode === 'upload' && m.base64) {
-            lastResult = await API.sendMediaUpload(token, contact.phone, m.base64, m.type, m.mime, m.caption, m.origName, m.ptt);
-          } else if (m.mode === 'url' && m.url.trim()) {
-            lastResult = await API.sendMedia(token, contact.phone, m.url.trim(), m.type, m.caption, m.origName || '');
+        // Texto primeiro (se houver), depois cada mídia. Para no primeiro erro (nada de envio pela metade)
+        // e diz se o problema foi no texto ou na mídia.
+        result = { ok: true };
+        if (text) {
+          const tr = await API.sendText(token, contact.phone, text);
+          if (!tr.ok) result = { ok: false, errorMessage: tr.errorMessage, part: 'texto' };
+        }
+        if (result.ok) {
+          for (const m of activeMedia) {
+            // Arquivo enviado pelo upload → vai por link (corpo minúsculo). Plano B: base64 (só arquivos pequenos).
+            const mr = (m.mode === 'upload' && m.fileUrl)
+              ? await API.sendMedia(token, contact.phone, m.fileUrl, m.type, m.caption, m.origName || '')
+              : (m.mode === 'upload' && m.base64)
+                ? await API.sendMediaUpload(token, contact.phone, m.base64, m.type, m.mime, m.caption, m.origName, m.ptt)
+                : await API.sendMedia(token, contact.phone, m.url.trim(), m.type, m.caption, m.origName || '');
+            if (!mr.ok) { result = { ok: false, errorMessage: mr.errorMessage, part: 'mídia' }; break; }
           }
         }
-        result = lastResult;
       } else {
         result = await API.sendText(token, contact.phone, text);
       }
@@ -2436,7 +2476,7 @@ const Dispatch = {
       } else {
         errors++;
         const translated = translateError(result.errorMessage);
-        Log.append(contact, 'error', translated);
+        Log.append(contact, 'error', translated + (result.part ? ` (${result.part})` : ''));
 
         // Detecta erro de instância (não do número) — aborta para não spammar erros
         if (isInstanceError(result.errorMessage)) {
@@ -2703,7 +2743,7 @@ function init() {
     const mediaOn = document.getElementById('toggle-media').checked;
     const activeMedia = AppState.mediaItems.filter(m =>
       (m.mode === 'url' && m.url && m.url.trim()) ||
-      (m.mode === 'upload' && m.base64)
+      (m.mode === 'upload' && (m.fileUrl || m.base64))
     );
     if (mediaOn && activeMedia.length > 0) {
       const icons = { image:'🖼️', video:'🎬', audio:'🎤', document:'📄' };
@@ -2747,7 +2787,7 @@ function init() {
     add() {
       if (AppState.mediaItems.length >= 4) return;
       const id = _micIdSeq++;
-      AppState.mediaItems.push({ id, type:'image', mode:'url', url:'', base64:null, mime:null, origName:null, ptt:false, caption:'' });
+      AppState.mediaItems.push({ id, type:'image', mode:'url', url:'', fileUrl:null, base64:null, mime:null, origName:null, ptt:false, caption:'' });
       this.render();
       if (AppState.mediaItems.length >= 4) document.getElementById('btn-add-media').classList.add('hidden');
     },
@@ -2759,6 +2799,14 @@ function init() {
     },
 
     get(id) { return AppState.mediaItems.find(m => m.id === id); },
+
+    // Atualiza só o texto de progresso (sem redesenhar o card a cada pedaço enviado)
+    setProgress(id, pct) {
+      const m = this.get(id); if (!m) return;
+      m._progress = pct;
+      const el = document.querySelector(`.media-item-card[data-id="${id}"] .fp-size`);
+      if (el) el.textContent = `${m._sizeLabel || ''} · enviando ${pct}%`;
+    },
 
     render() {
       const list = document.getElementById('media-items-list');
@@ -2772,11 +2820,13 @@ function init() {
           `<button class="mic-type${item.type===t?' active':''}" data-mtype="${t}">${MTYPE_ICONS[t]} ${l}</button>`
         ).join('');
 
-        const filePreviewHtml = item.base64
-          ? `<div class="file-preview"><span class="fp-icon">${MTYPE_ICONS[item.type]}</span><div class="fp-info"><div class="fp-name">${esc(item.origName||'arquivo')}</div><div class="fp-size">${item._sizeLabel||''}</div></div><button class="fp-remove" data-action="clear-file">✕</button></div>`
+        const hasFile = !!(item.fileUrl || item.base64 || item._uploading);
+        const sizeLabel = item._uploading ? `${item._sizeLabel||''} · enviando ${item._progress||0}%` : (item._sizeLabel||'');
+        const filePreviewHtml = hasFile
+          ?`<div class="file-preview"><span class="fp-icon">${MTYPE_ICONS[item.type]}</span><div class="fp-info"><div class="fp-name">${esc(item.origName||'arquivo')}</div><div class="fp-size">${item._sizeLabel||''}</div></div><button class="fp-remove" data-action="clear-file">✕</button></div>`
           : '';
-        const uzHidden = item.base64 ? 'hidden' : '';
-        const fpHidden = item.base64 ? '' : 'hidden';
+        const uzHidden = hasFile ? 'hidden' : '';
+        const fpHidden = hasFile ? '' : 'hidden';
 
         card.innerHTML = `
           <div class="mic-header">
@@ -2796,10 +2846,10 @@ function init() {
               <input type="file" class="mic-file-input" accept="${ACCEPTS[item.type]||'*/*'}" />
               <div class="uz-icon">📎</div>
               <div class="uz-label">Clique ou arraste</div>
-              <div class="uz-sub">Imagem ≤10 MB · Vídeo/Áudio ≤50 MB</div>
+              <div class="uz-sub">Até ${MEDIA_MAX_MB} MB por arquivo</div>
             </div>
             <div class="file-preview ${fpHidden}">
-              ${item.base64 ? `<span class="fp-icon">${MTYPE_ICONS[item.type]}</span><div class="fp-info"><div class="fp-name">${esc(item.origName||'arquivo')}</div><div class="fp-size">${item._sizeLabel||''}</div></div><button class="fp-remove" data-action="clear-file">✕</button>` : ''}
+              ${hasFile ? `<span class="fp-icon">${MTYPE_ICONS[item.type]}</span><div class="fp-info"><div class="fp-name">${esc(item.origName||'arquivo')}</div><div class="fp-size">${sizeLabel}</div></div>${item._uploading ? '' : '<button class="fp-remove" data-action="clear-file">✕</button>'}` : ''}
             </div>
             ${item.ptt ? '<div class="ptt-badge">🎤 Enviado como áudio gravado na hora (PTT)</div>' : ''}
           </div>
@@ -2834,19 +2884,32 @@ function init() {
         const fileInput = card.querySelector('.mic-file-input');
         const zone = card.querySelector('.upload-zone');
 
-        const handleFile = file => {
+        const handleFile = async file => {
           if (!file) return;
           const MB = file.size / 1024 / 1024;
-          const maxMB = file.type.startsWith('image/') ? 10 : 50;
-          if (MB > maxMB) { alert(`Arquivo muito grande (${MB.toFixed(1)} MB). Limite: ${maxMB} MB.`); return; }
+          if (MB > MEDIA_MAX_MB) { alert(`Arquivo muito grande (${MB.toFixed(1)} MB). Limite: ${MEDIA_MAX_MB} MB.`); return; }
           const m = this.get(item.id); if (!m) return;
           m.origName = file.name;
           m.mime = file.type;
           m.ptt = m.type === 'audio';
           m._sizeLabel = MB < 1 ? `${(file.size/1024).toFixed(0)} KB` : `${MB.toFixed(1)} MB`;
-          const reader = new FileReader();
-          reader.onload = ev => { m.base64 = ev.target.result; this.render(); };
-          reader.readAsDataURL(file);
+          m.fileUrl = null; m.base64 = null; m._uploading = true; m._progress = 0;
+          this.render();
+          try {
+            // Sobe o arquivo UMA vez, direto pro armazenamento; o disparo manda só o link.
+            m.fileUrl = await MediaUpload.upload(file, pct => this.setProgress(m.id, pct));
+          } catch (err) {
+            console.warn('Upload pro armazenamento falhou:', err);
+            if (file.size <= 3 * 1024 * 1024) {
+              // Plano B: arquivo pequeno ainda cabe no limite de 4,5 MB do servidor — vai em base64
+              m.base64 = await new Promise(resolve => { const r = new FileReader(); r.onload = ev => resolve(ev.target.result); r.readAsDataURL(file); });
+            } else {
+              alert(`Não consegui enviar o arquivo: ${err.message}`);
+              m.origName = null; m.mime = null; m.ptt = false; m._sizeLabel = '';
+            }
+          }
+          m._uploading = false;
+          this.render();
         };
 
         fileInput?.addEventListener('change', e => handleFile(e.target.files[0]));
@@ -2856,7 +2919,7 @@ function init() {
 
         card.querySelector('[data-action="clear-file"]')?.addEventListener('click', () => {
           const m = this.get(item.id); if (!m) return;
-          m.base64 = null; m.origName = null; m.mime = null; m.ptt = false; m._sizeLabel = '';
+          m.base64 = null; m.fileUrl = null; m._uploading = false; m.origName = null; m.mime = null; m.ptt = false; m._sizeLabel = '';
           this.render();
         });
 

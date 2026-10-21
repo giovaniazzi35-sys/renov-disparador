@@ -1032,6 +1032,56 @@ app.post('/api/agent/uzapi-configure-webhook', requireAuth, async (req, res) => 
   } catch (err) { res.status(502).json({ error: err.message }); }
 });
 
+// ── Mídia do Disparador ──────────────────────────────────────
+// O Vercel recusa corpo de requisição acima de ~4,5 MB (HTTP 413), então o arquivo NÃO passa
+// pelo servidor: o navegador sobe direto pro Supabase Storage com uma URL assinada (uma vez só)
+// e o disparo manda apenas o link público pra Uzapi.
+const MEDIA_BUCKET    = 'disparo-media';
+const MEDIA_MAX_BYTES = 30 * 1024 * 1024;
+const MEDIA_TTL_MS    = 3 * 24 * 3600 * 1000;   // arquivos do disparo são apagados depois de 3 dias
+
+function storageCall(p, { method = 'GET', json } = {}) {
+  return proxyFetch(`${SUPABASE_URL}/storage/v1${p}`, { method, headers: SB_HEADERS, body: json !== undefined ? JSON.stringify(json) : undefined });
+}
+async function ensureMediaBucket() {
+  const r = await storageCall('/bucket', { method: 'POST', json: { id: MEDIA_BUCKET, name: MEDIA_BUCKET, public: true, file_size_limit: MEDIA_MAX_BYTES } });
+  return r.ok || r.status === 409 || /already exists|duplicate/i.test(await r.text().catch(() => ''));
+}
+// Apaga os arquivos antigos deste usuário (melhor esforço — nunca atrapalha o envio)
+async function cleanupOldMedia(prefix) {
+  try {
+    const r = await storageCall(`/object/list/${MEDIA_BUCKET}`, { method: 'POST', json: { prefix, limit: 200, sortBy: { column: 'created_at', order: 'asc' } } });
+    const rows = await r.json();
+    if (!r.ok || !Array.isArray(rows)) return;
+    const old = rows.filter(o => o.created_at && Date.now() - new Date(o.created_at).getTime() > MEDIA_TTL_MS).map(o => prefix + o.name);
+    if (old.length) await storageCall(`/object/${MEDIA_BUCKET}`, { method: 'DELETE', json: { prefixes: old } });
+  } catch (_) {}
+}
+
+// Devolve uma URL assinada pro navegador subir o arquivo + o link público que o disparo vai usar
+app.post('/api/media/sign', requireAuth, async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ error: 'Armazenamento indisponível.' });
+  const { filename, size } = req.body || {};
+  if (Number(size) > MEDIA_MAX_BYTES) return res.status(413).json({ error: `Arquivo acima do limite de ${MEDIA_MAX_BYTES / 1024 / 1024} MB.` });
+  const prefix = `${configIdFor(req.session.email)}/`;
+  const safeName = String(filename || 'arquivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_').slice(-80) || 'arquivo';
+  const objectPath = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+  try {
+    const sign = () => storageCall(`/object/upload/sign/${MEDIA_BUCKET}/${objectPath}`, { method: 'POST', json: {} });
+    let r = await sign();
+    if (!r.ok && await ensureMediaBucket()) r = await sign();   // bucket ainda não existia → cria e tenta de novo
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.url) return res.status(502).json({ error: data.message || (typeof data.error === 'string' ? data.error : '') || `Falha ao preparar o upload (HTTP ${r.status}).` });
+    await cleanupOldMedia(prefix);
+    const rel = String(data.url);
+    res.json({
+      ok: true,
+      uploadUrl: rel.startsWith('http') ? rel : `${SUPABASE_URL}/storage/v1${rel}`,
+      publicUrl: `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${objectPath}`,
+    });
+  } catch (err) { res.status(502).json({ error: err.message }); }
+});
+
 // ══════════════════════════════════════════════════════════════
 // CRM — leads / pipeline (por usuário)
 // ══════════════════════════════════════════════════════════════
