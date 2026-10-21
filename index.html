@@ -1529,49 +1529,91 @@
   <!-- ═══ PAINEL AGENTE IA ══════════════════════════════════════ -->
   <div id="panel-agente" class="hidden">
 
-    <!-- Status bar -->
+    <!-- Status -->
     <div class="agent-status-bar">
       <div class="agent-badge off" id="agent-badge">Inativo</div>
       <button class="btn-toggle-agent activate" id="btn-toggle-agent">⚡ Ativar Agente</button>
-      <span class="agent-instance-label" id="agent-instance-label"></span>
+      <span class="agent-instance-label" id="agent-conn-label"></span>
     </div>
 
-    <!-- ── Bloco 1: Conexão WhatsApp (Uzapi) ── -->
+    <!-- ── 1. WhatsApp (Uzapi) ── -->
     <div class="card">
-      <div class="card-title">📱 Conexão WhatsApp — Uzapi</div>
-      <div class="card-sub" style="margin-bottom:12px">Cole suas credenciais da Uzapi abaixo — o agente e o CRM enviam por ela.</div>
-      <input type="hidden" id="uzapi-provider" value="uzapi" />
-      <div id="uzapi-fields">
-        <div class="agent-two-col">
-          <div class="field" style="margin:0">
-            <label class="field-label">Username <span style="font-weight:400;color:var(--text-3)">— o mesmo do seu login Uzapi</span></label>
-            <input type="text" id="uzapi-username" placeholder="giovaniazzi2019" />
-          </div>
-          <div class="field" style="margin:0">
-            <label class="field-label">Phone Number ID</label>
-            <input type="text" id="uzapi-phoneid" placeholder="469722114998415" />
-          </div>
+      <div class="card-title">📱 WhatsApp — Uzapi</div>
+      <div class="card-sub" style="margin-bottom:12px">Cole o <b>Phone Number ID</b> e o <b>token</b> da sua instância. O agente, o CRM e o Disparador enviam por ela.</div>
+      <div class="agent-two-col">
+        <div class="field" style="margin:0">
+          <label class="field-label">Phone Number ID</label>
+          <input type="text" id="uzapi-phoneid" placeholder="469722114998415" autocomplete="off" />
         </div>
-        <div class="field">
-          <label class="field-label">Token <span style="font-weight:400;color:var(--text-3)">— gere um token de longa duração no painel da Uzapi (não use o token de teste da página de docs)</span></label>
+        <div class="field" style="margin:0">
+          <label class="field-label">Token <span style="font-weight:400;color:var(--text-3)">— de longa duração, do painel da Uzapi</span></label>
           <div class="token-row">
-            <input type="password" id="uzapi-token" placeholder="Cole aqui o token (Bearer)" />
+            <input type="password" id="uzapi-token" placeholder="Cole aqui o token (Bearer)" autocomplete="new-password" />
             <button class="btn-icon" id="btn-uzapi-toggle-token">👁</button>
           </div>
-          <div id="uzapi-token-status" style="font-size:12px;color:var(--text-3);margin-top:6px"></div>
         </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-primary btn-sm" id="btn-uzapi-save">💾 Salvar</button>
-          <button class="btn-ghost btn-sm" id="btn-uzapi-test">🔬 Testar conexão</button>
+      </div>
+      <div id="uzapi-token-status" style="font-size:12px;color:var(--text-3);margin:6px 0 12px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" id="btn-uzapi-save">💾 Salvar</button>
+        <button class="btn-ghost btn-sm" id="btn-uzapi-test">🔬 Testar conexão</button>
+      </div>
+      <div id="uzapi-test-status" style="font-size:13px;margin-top:10px"></div>
+
+      <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+        <label class="field-label">URL do webhook <span style="font-weight:400;color:var(--text-3)">— é por ela que as mensagens dos leads chegam no agente</span></label>
+        <div class="webhook-url-box" id="webhook-url-box" title="Clique para copiar"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <button class="btn-ghost btn-sm" id="btn-uzapi-webhook">🔗 Configurar na Uzapi automaticamente</button>
+          <span id="uzapi-webhook-status" style="font-size:12px"></span>
         </div>
-        <div id="uzapi-test-status" style="font-size:13px;margin-top:10px"></div>
       </div>
     </div>
 
-    <!-- ── Bloco 2: Prompt do Agente ── -->
+    <!-- ── 2. IA ── -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">🧠 IA do agente</div>
+      <div class="card-sub" style="margin-bottom:12px">Funciona com qualquer API compatível com OpenAI (<code>/chat/completions</code>): OpenRouter, OpenAI, Gemini, Groq, Claude… Escolha o provedor ou informe o endereço.</div>
+      <div class="agent-two-col">
+        <div class="field" style="margin:0">
+          <label class="field-label">Provedor</label>
+          <select id="agent-ai-preset">
+            <option value="openrouter">OpenRouter</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="groq">Groq</option>
+            <option value="custom">Outro (informar endereço)</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label">Endereço da API</label>
+          <input type="text" id="agent-ai-base" placeholder="https://api.openai.com/v1" autocomplete="off" />
+        </div>
+      </div>
+      <div class="agent-two-col" style="margin-top:12px">
+        <div class="field" style="margin:0">
+          <label class="field-label">Chave da API</label>
+          <div class="token-row">
+            <input type="password" id="agent-ai-key" placeholder="sk-..." autocomplete="new-password" />
+            <button class="btn-icon" id="btn-agent-toggle-key">👁</button>
+          </div>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label">Modelo</label>
+          <input type="text" id="agent-ai-model" placeholder="gpt-4o-mini" autocomplete="off" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <button class="btn-ghost btn-sm" id="btn-agent-test-ai">🔬 Testar IA</button>
+        <span id="agent-ai-status" style="font-size:12px;color:var(--text-3)"></span>
+      </div>
+    </div>
+
+    <!-- ── 3. Prompt ── -->
     <div class="card" style="margin-top:12px">
       <div class="card-title">🎯 Prompt do Agente</div>
-      <div class="card-sub">Cole o texto do prompt abaixo, ou envie um PDF/TXT/MD — fica salvo só na sua conta.</div>
+      <div class="card-sub">Cole o texto do prompt abaixo, ou envie um PDF/TXT/MD — fica salvo só na sua conta. Descreva o negócio, o tom de voz e <b>o que é um lead qualificado</b> (ex.: “é o decisor e pediu proposta”).</div>
       <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
         <button class="btn-ghost btn-sm" id="btn-agent-upload-doc">📎 Enviar PDF / TXT</button>
         <span class="agent-doc-name hidden" id="agent-doc-name"></span>
@@ -1581,76 +1623,45 @@
       <input type="file" id="agent-doc-file" accept=".pdf,.txt,.md" style="display:none" />
     </div>
 
-    <!-- ── Bloco 3: IA ── -->
+    <!-- ── 4. Grupo que recebe os leads qualificados ── -->
     <div class="card" style="margin-top:12px">
-      <div class="card-title">🤖 Modelo de IA</div>
+      <div class="card-title">👥 Enviar leads qualificados para um grupo</div>
+      <div class="card-sub" style="margin-bottom:12px">Quando o lead for qualificado na conversa e demonstrar interesse, o agente manda este resumo no grupo escolhido (uma vez por lead):</div>
+      <pre style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;margin:0 0 14px;color:var(--text-2)"><b>Nome do lead:</b> Maria Souza
+<b>Número do lead:</b> +55 11 98888-7777
+<b>Resumo da conversa:</b>
+Dona de uma loja, quer aumentar as vendas e pediu uma proposta.</pre>
       <div class="field">
-        <label class="field-label">Chave da API OpenRouter <span style="font-weight:400;color:var(--text-3)">— gratuito em openrouter.ai → Keys</span></label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div class="token-row" style="flex:1">
-            <input type="password" id="agent-or-key" placeholder="sk-or-v1-..." />
-            <button class="btn-icon" id="btn-agent-toggle-key">👁</button>
+        <label class="field-label">Grupo de destino</label>
+        <div style="display:flex;gap:8px">
+          <select id="agent-group-select" style="flex:1"><option value="">— Clique em “Buscar meus grupos” —</option></select>
+          <button class="btn-ghost btn-sm" id="btn-agent-groups" style="white-space:nowrap">🔎 Buscar meus grupos</button>
+        </div>
+        <div id="agent-group-status" style="font-size:12px;margin-top:6px;color:var(--text-3)"></div>
+      </div>
+      <details id="agent-group-manual" style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--text-3);user-select:none;padding:4px 0">Não achou o grupo? Informe o ID ou o link de convite</summary>
+        <div class="agent-two-col" style="margin-top:10px">
+          <div class="field" style="margin:0">
+            <label class="field-label">ID do grupo</label>
+            <input type="text" id="agent-group-id" placeholder="120363000000000000@g.us" autocomplete="off" />
           </div>
-          <button class="btn-ghost btn-sm" id="btn-agent-test-key" style="white-space:nowrap">🔬 Testar</button>
-        </div>
-        <div id="agent-key-status" style="font-size:12px;margin-top:6px;color:var(--text-3)">Insira a chave e clique em Testar, ou salve e o sistema testa automaticamente.</div>
-      </div>
-      <div class="field">
-        <label class="field-label">Modelo selecionado</label>
-        <select id="agent-model">
-          <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek Chat V3 — excelente qualidade, gratuito</option>
-          <option value="google/gemma-3-27b-it:free">Gemma 3 27B — Google, gratuito</option>
-          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B — Meta, gratuito</option>
-          <option value="qwen/qwen3-8b:free">Qwen3 8B — rápido, gratuito</option>
-          <option value="mistralai/mistral-7b-instruct:free">Mistral 7B — leve, gratuito</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- ── Bloco 4: Google Agenda (colapsável) ── -->
-    <div class="card" style="margin-top:12px">
-      <div class="row-between" style="cursor:pointer" id="calendar-header">
-        <div class="card-title" style="margin:0">📅 Agendamento — Google Agenda</div>
-        <label class="toggle-label" style="gap:8px" onclick="event.stopPropagation()">
-          <input type="checkbox" id="agent-scheduling-enabled" />
-          <span class="toggle-switch"></span>
-          <span style="font-size:13px">Ativar</span>
-        </label>
-      </div>
-      <div id="calendar-fields" style="display:none;margin-top:14px">
-        <div id="google-connected-box" style="display:none;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;align-items:center;gap:10px">
-          <span style="font-size:20px">✅</span>
-          <div style="flex:1"><div style="font-weight:600;font-size:13px;color:#4ade80">Conectado ao Google</div><div id="google-connected-email" style="font-size:12px;color:var(--text-2)"></div></div>
-          <button class="btn-secondary" id="btn-google-disconnect" style="font-size:12px;padding:4px 10px">Desconectar</button>
-        </div>
-        <div id="google-login-box">
-          <details style="margin-bottom:10px;background:var(--card2);border-radius:8px;padding:10px">
-            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-2)">🔧 Como configurar (faça uma vez)</summary>
-            <div style="font-size:12px;line-height:1.8;margin-top:10px;color:var(--text-2)">
-              <b>1.</b> <b>console.cloud.google.com</b> → Crie um projeto → Ative <b>Google Calendar API</b><br>
-              <b>2.</b> APIs e Serviços → Credenciais → OAuth 2.0 → Tipo: <b>Aplicativo da Web</b><br>
-              &nbsp;&nbsp;&nbsp;URI de redirecionamento autorizado:<br>
-              <code id="oauth-redirect-uri" style="display:block;background:#0003;padding:4px 8px;border-radius:4px;margin:4px 0;word-break:break-all;font-size:11px"></code>
-              <b>3.</b> Cole Client ID e Secret abaixo → Salvar → <b>Login com Google</b>
+          <div class="field" style="margin:0">
+            <label class="field-label">Ou link de convite</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="agent-group-invite" placeholder="https://chat.whatsapp.com/..." autocomplete="off" style="flex:1" />
+              <button class="btn-ghost btn-sm" id="btn-agent-invite">Descobrir ID</button>
             </div>
-          </details>
-          <div class="agent-two-col">
-            <div class="field" style="margin:0"><label class="field-label">Client ID</label><input type="text" id="agent-google-client-id" placeholder="12345-abc.apps.googleusercontent.com" autocomplete="off" /></div>
-            <div class="field" style="margin:0"><label class="field-label">Client Secret</label><input type="password" id="agent-google-client-secret" placeholder="GOCSPX-..." autocomplete="new-password" /></div>
           </div>
-          <button class="btn-primary" id="btn-google-login" style="width:100%;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px">
-            <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-            Login com Google
-          </button>
         </div>
-        <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
-          <button class="btn-secondary" id="btn-test-calendar" style="flex:1">🗓 Testar conexão com calendário</button>
-        </div>
-        <div id="calendar-test-status" style="font-size:12px;margin-top:6px;min-height:18px"></div>
+      </details>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn-ghost btn-sm" id="btn-agent-group-test">📨 Enviar mensagem de teste ao grupo</button>
+        <span id="agent-group-test-status" style="font-size:12px"></span>
       </div>
     </div>
 
-    <!-- ── Save ── -->
+    <!-- ── Salvar ── -->
     <div style="margin-top:12px">
       <button class="btn-primary btn-lg" id="btn-agent-save" style="width:100%">💾 Salvar configuração</button>
     </div>
@@ -1660,17 +1671,13 @@
       <div class="row-between" style="margin-bottom:14px">
         <div>
           <div class="card-title" style="margin-bottom:2px">💬 Chat de teste</div>
-          <div class="card-sub" style="margin:0">Converse com o agente usando o prompt e documento configurados acima</div>
+          <div class="card-sub" style="margin:0">Converse com o agente usando o prompt e a IA configurados acima (não envia nada pelo WhatsApp)</div>
         </div>
         <button class="btn-ghost btn-sm" id="btn-chat-clear">🗑 Limpar</button>
       </div>
-
-      <!-- Mensagens -->
       <div class="chat-test-box" id="chat-test-box">
-        <div class="chat-empty" id="chat-empty">Salve a configuração e envie uma mensagem para testar o agente</div>
+        <div class="chat-empty" id="chat-empty">Envie uma mensagem para testar o agente</div>
       </div>
-
-      <!-- Input -->
       <div class="chat-test-input-row">
         <textarea id="chat-test-input" rows="1" placeholder="Digite uma mensagem de teste..." style="resize:none;flex:1;min-height:40px;max-height:120px"></textarea>
         <button class="btn-primary" id="btn-chat-send" style="padding:10px 18px;flex-shrink:0">➤</button>
@@ -1682,55 +1689,17 @@
       <div class="row-between" style="margin-bottom:12px">
         <div>
           <div class="card-title" style="margin-bottom:2px">💬 Conversas ativas</div>
-          <div class="card-sub" style="margin:0">Números que o agente está atendendo. Desative a IA por contato sem parar o agente.</div>
+          <div class="card-sub" style="margin:0">Números que o agente está atendendo. Desligue a IA por contato sem parar o agente.</div>
         </div>
         <button class="btn-ghost btn-sm" id="btn-refresh-convs">↺ Atualizar</button>
       </div>
       <div id="conversations-list"><div style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhuma conversa ainda. O agente registra aqui assim que receber a primeira mensagem.</div></div>
     </div>
 
-    <!-- Log de atividade -->
-    <div class="card" style="margin-top:16px">
-      <div class="row-between">
-        <div class="card-title" style="margin-bottom:0">Atividade em tempo real</div>
-        <button class="btn-ghost btn-sm" id="btn-agent-clear-log">🗑 Limpar</button>
-      </div>
-      <div class="agent-log" id="agent-log">
-        <div class="agent-log-line" style="color:var(--text-3)">Nenhuma atividade ainda. Ative o agente para começar.</div>
-      </div>
-    </div>
-
   </div><!-- /panel-agente -->
 
   </main>
 </div><!-- /app -->
-
-<!-- ═══ MODAL QR / PAIR CODE ════════════════════════════════ -->
-<div class="modal-overlay hidden" id="modal-connect">
-  <div class="modal-box">
-    <div class="modal-title" id="modal-title">Conectar via QR Code</div>
-    <div class="modal-sub" id="modal-sub">Abra o WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie o QR</div>
-
-    <!-- QR Code -->
-    <div id="modal-qr-section">
-      <div class="qr-img-wrap">
-        <img id="qr-img" src="" alt="QR Code" />
-      </div>
-      <div class="qr-timer">QR expira em <span id="qr-countdown">60</span>s · <button class="btn-ghost btn-sm" id="btn-refresh-qr" style="padding:4px 10px;font-size:11px">↺ Atualizar</button></div>
-    </div>
-
-    <!-- Pair Code -->
-    <div id="modal-pair-section" class="hidden">
-      <div class="pair-code-display" id="pair-code-display">········</div>
-      <div class="modal-sub">Digite este código no WhatsApp → Aparelhos conectados → Vincular com número de telefone</div>
-    </div>
-
-    <div class="row-end" style="justify-content:center;gap:10px;margin-top:8px">
-      <button class="btn-ghost" id="btn-modal-close">Fechar</button>
-      <button class="btn-primary btn-sm" id="btn-modal-check-status">✓ Já conectei</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ============================================================
@@ -2666,7 +2635,7 @@ function init() {
   _wire('btn-goto-agent-uzapi', () => {
     const tab = document.getElementById('tab-agente');
     if (tab) tab.click();
-    setTimeout(() => { const el = document.getElementById('uzapi-username'); if (el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
+    setTimeout(() => { const el = document.getElementById('uzapi-phoneid'); if (el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
   });
   Instances.checkStatus(true);
 
@@ -2987,581 +2956,430 @@ function init() {
     AppState.userScrolledLog = el.scrollTop < el.scrollHeight - el.clientHeight - 30;
   });
 
-  // Close modal on overlay click
-  document.getElementById('modal-connect').addEventListener('click', e => {
-    if (e.target === document.getElementById('modal-connect')) {
-      document.getElementById('modal-connect').classList.add('hidden');
-      clearInterval(AppState.qrTimer);
-    }
-  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
 
 // ============================================================
-// ============================================================
-// PROMPT PADRÃO RENOV
-// ============================================================
-// ============================================================
 // AGENTE IA
 // ============================================================
 const Agent = {
-  docText: '',
-  pollTimer: null,
+  chatHistory: [],        // [{role:'user'|'assistant', content}]
   convPollTimer: null,
-  chatHistory: [], // [{role:'user'|'assistant', content:''}]
+  hasAiKey: false,
+  groupName: '',
 
-  async loadInstances() {
+  AI_PRESETS: {
+    openrouter: { base: 'https://openrouter.ai/api/v1',                          model: 'deepseek/deepseek-chat-v3-0324:free' },
+    openai:     { base: 'https://api.openai.com/v1',                             model: 'gpt-4o-mini' },
+    anthropic:  { base: 'https://api.anthropic.com/v1',                          model: 'claude-sonnet-5-5' },
+    gemini:     { base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash' },
+    groq:       { base: 'https://api.groq.com/openai/v1',                        model: 'llama-3.3-70b-versatile' },
+  },
+
+  $(id) { return document.getElementById(id); },
+
+  // Chamada JSON ao backend; devolve { ok, status, data } sem lançar erro
+  async api(method, url, body) {
     try {
-      const instances = await API.getAllInstances();
-      this._instances = instances;
-      this.checkInstanceConnection();
-    } catch (err) {
-      UI.addBanner('error', 'Erro ao carregar instâncias: ' + err.message);
-    }
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    } catch (err) { return { ok: false, status: 0, data: { error: err.message } }; }
   },
 
-  // Avisa em destaque se a instância Uzapi caiu do WhatsApp
-  checkInstanceConnection() {
-    const inst = (this._instances || [])[0];
-    let warnEl = document.getElementById('agent-conn-warning');
-    if (!warnEl) {
-      warnEl = document.createElement('div');
-      warnEl.id = 'agent-conn-warning';
-      warnEl.style.cssText = 'display:none;margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#f87171;font-size:13px;font-weight:600';
-      document.getElementById('panel-agente')?.querySelector('.card')?.appendChild(warnEl);
-    }
-    if (inst && !inst.connected) {
-      warnEl.style.display = 'block';
-      warnEl.textContent = '⚠ A instância "' + inst.name + '" está DESCONECTADA do WhatsApp — o agente não recebe nem responde mensagens. Confira suas credenciais da Uzapi.';
-      this.addLog('Instância "' + inst.name + '" desconectada do WhatsApp — verifique a Uzapi', 'err');
-    } else {
-      warnEl.style.display = 'none';
-    }
+  setStatus(el, ok, text) {
+    el.style.color = ok === null ? 'var(--text-3)' : ok ? '#4ade80' : '#f87171';
+    el.textContent = text;
   },
 
-  async autoProbeKey() {
-    const key = document.getElementById('agent-or-key').value.trim();
-    if (!key) return;
-    // Só roda se o dropdown ainda tiver as opções estáticas (não foi probeado antes)
-    const sel = document.getElementById('agent-model');
-    const alreadyProbed = Array.from(sel.options).some(o => o.text.includes('✓'));
-    if (alreadyProbed) return;
-    const statusEl = document.getElementById('agent-key-status');
-    statusEl.style.color = 'var(--text-3)';
-    statusEl.textContent = '⏳ Verificando modelos disponíveis...';
-    try {
-      const res = await fetch('/api/agent/probe-models', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key }),
-      });
-      const j = await res.json();
-      if (!res.ok || !j.workingModel) { statusEl.textContent = '⚠ Chave salva mas nenhum modelo respondeu agora.'; return; }
-      const prevVal = sel.value;
-      sel.innerHTML = '';
-      j.models.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name + (m.id === j.workingModel ? ' ✓' : '');
-        sel.appendChild(opt);
-      });
-      // Sempre seleciona o primeiro da lista; workingModel confirma que funciona
-      sel.value = j.models[0].id;
-      statusEl.style.color = '#4ade80';
-      statusEl.textContent = `✓ ${j.models.length} modelos carregados. Usando: ${j.models[0].id}`;
-    } catch (_) {}
-  },
-
+  // ── Configuração (prompt, IA, grupo) ─────────────────────
   async loadConfig() {
-    try {
-      const res = await fetch('/api/agent/config');
-      const j = await res.json();
-      if (!j.ok) return;
-      const d = j.data;
-      this.checkInstanceConnection();
-      if (d.model) document.getElementById('agent-model').value = d.model;
-      document.getElementById('agent-prompt').value = d.prompt || '';
-      // Calendário
-      const schedEnable = !!d.schedulingEnabled;
-      document.getElementById('agent-scheduling-enabled').checked = schedEnable;
-      document.getElementById('calendar-fields').style.display = schedEnable ? '' : 'none';
-      if (d.googleClientId) document.getElementById('agent-google-client-id').value = d.googleClientId;
-      if (d.googleClientSecret) document.getElementById('agent-google-client-secret').value = d.googleClientSecret;
-      await this.loadGoogleStatus();
-
-      this.updateBadge(d.active);
-      const savedKey = localStorage.getItem('agent_or_key');
-      if (savedKey) {
-        document.getElementById('agent-or-key').value = savedKey;
-        this.autoProbeKey(); // dispara probe automaticamente ao carregar
-      }
-    } catch (_) {}
+    const r = await this.api('GET', '/api/agent/config');
+    if (!r.ok || !r.data.ok) return;
+    const d = r.data.data;
+    this.$('agent-prompt').value = d.prompt || '';
+    this.$('agent-ai-base').value = d.aiBaseUrl || '';
+    this.$('agent-ai-model').value = d.aiModel || '';
+    this.hasAiKey = !!d.hasAiKey;
+    this.$('agent-ai-key').placeholder = d.hasAiKey ? '••••••••  (chave salva — deixe em branco para manter)' : 'sk-...';
+    const preset = Object.keys(this.AI_PRESETS).find(k => this.AI_PRESETS[k].base === (d.aiBaseUrl || '').replace(/\/+$/, ''));
+    this.$('agent-ai-preset').value = preset || 'custom';
+    this.groupName = d.handoffGroupName || '';
+    this.renderGroups(d.handoffGroupId ? [{ id: d.handoffGroupId, name: d.handoffGroupName }] : [], d.handoffGroupId);
+    this.$('agent-group-id').value = d.handoffGroupId || '';
+    this.updateBadge(d.active);
   },
 
   async save() {
-    const btn = document.getElementById('btn-agent-save');
+    const btn = this.$('btn-agent-save');
+    const prompt = this.$('agent-prompt').value.trim();
+    const aiKey = this.$('agent-ai-key').value.trim();
+    if (!prompt) { UI.addBanner('warning', 'Cole o prompt do agente ou envie um arquivo.'); return; }
+    if (!aiKey && !this.hasAiKey) { UI.addBanner('warning', 'Informe a chave da API de IA.'); return; }
+    if (!this.$('agent-ai-model').value.trim()) { UI.addBanner('warning', 'Informe o modelo de IA.'); return; }
     btn.disabled = true; btn.textContent = 'Salvando...';
+    const r = await this.api('POST', '/api/agent/config', {
+      prompt, aiKey,
+      aiBaseUrl: this.$('agent-ai-base').value.trim(),
+      aiModel: this.$('agent-ai-model').value.trim(),
+      handoffGroupId: this.$('agent-group-id').value.trim(),
+      handoffGroupName: this.groupName,
+    });
+    btn.disabled = false; btn.textContent = '💾 Salvar configuração';
+    if (!r.ok) { UI.addBanner('error', 'Erro ao salvar: ' + (r.data.error || 'HTTP ' + r.status)); return; }
+    this.$('agent-ai-key').value = '';
+    this.hasAiKey = !!r.data.data.hasAiKey;
+    this.updateBadge(r.data.data.active);
+    const missing = [];
+    if (!r.data.data.hasUzapiToken || !r.data.data.uzapiPhoneId) missing.push('as credenciais da Uzapi');
+    if (!r.data.data.handoffGroupId) missing.push('o grupo de destino dos leads');
+    UI.addBanner(missing.length ? 'warning' : 'info', missing.length ? `✓ Configuração salva. Ainda falta definir ${missing.join(' e ')}.` : '✓ Configuração salva! Agente ativo.');
+  },
+
+  // ── IA ──────────────────────────────────────────────────
+  onPresetChange() {
+    const p = this.AI_PRESETS[this.$('agent-ai-preset').value];
+    if (!p) return;   // "Outro": o usuário digita
+    this.$('agent-ai-base').value = p.base;
+    this.$('agent-ai-model').value = p.model;
+  },
+
+  async testAI() {
+    const btn = this.$('btn-agent-test-ai'), st = this.$('agent-ai-status');
+    btn.disabled = true; btn.textContent = '⏳ Testando...'; this.setStatus(st, null, 'Chamando a IA...');
+    const r = await this.api('POST', '/api/agent/chat', {
+      test: true, aiKey: this.$('agent-ai-key').value.trim(),
+      aiBaseUrl: this.$('agent-ai-base').value.trim(), aiModel: this.$('agent-ai-model').value.trim(),
+    });
+    btn.disabled = false; btn.textContent = '🔬 Testar IA';
+    if (r.ok && r.data.ok) this.setStatus(st, true, `✓ A IA respondeu: “${r.data.reply}”. Salve a configuração para usar.`);
+    else this.setStatus(st, false, '✗ ' + (r.data.error || 'Sem resposta da IA'));
+  },
+
+  // ── WhatsApp / Uzapi ────────────────────────────────────
+  async loadUzapi() {
+    const r = await this.api('GET', '/api/agent/uzapi-settings');
+    if (!r.ok) return;
+    this.$('uzapi-phoneid').value = r.data.uzapiPhoneId || '';
+    this.setStatus(this.$('uzapi-token-status'), r.data.hasToken ? true : null, r.data.hasToken ? '✓ Token salvo (deixe em branco para manter o atual).' : 'Nenhum token salvo ainda.');
+  },
+
+  async saveUzapi() {
+    const btn = this.$('btn-uzapi-save');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    const r = await this.api('POST', '/api/agent/uzapi-settings', {
+      uzapiPhoneId: this.$('uzapi-phoneid').value.trim(), uzapiToken: this.$('uzapi-token').value.trim(),
+    });
+    btn.disabled = false; btn.textContent = '💾 Salvar';
+    if (!r.ok) { UI.addBanner('error', 'Erro ao salvar: ' + (r.data.error || 'HTTP ' + r.status)); return; }
+    this.$('uzapi-token').value = '';
+    UI.addBanner('info', '✓ Credenciais da Uzapi salvas.');
+    this.loadUzapi(); this.refreshConnection();
+  },
+
+  async testUzapi() {
+    const btn = this.$('btn-uzapi-test'), st = this.$('uzapi-test-status');
+    btn.disabled = true; btn.textContent = '⏳ Testando...'; this.setStatus(st, null, 'Consultando a instância na Uzapi...');
+    const r = await this.api('POST', '/api/agent/uzapi-test');
+    btn.disabled = false; btn.textContent = '🔬 Testar conexão';
+    if (!r.ok) { this.setStatus(st, false, '✗ ' + (r.data.error || 'HTTP ' + r.status)); return; }
+    this.setStatus(st, r.data.connected, r.data.connected ? '✓ Conexão OK — WhatsApp conectado.' : '⚠ A Uzapi respondeu, mas o WhatsApp parece desconectado. Conecte o número no painel da Uzapi.');
+    this.refreshConnection();
+  },
+
+  async configureWebhook() {
+    const btn = this.$('btn-uzapi-webhook'), st = this.$('uzapi-webhook-status');
+    btn.disabled = true; this.setStatus(st, null, 'Configurando...');
+    const r = await this.api('POST', '/api/agent/uzapi-configure-webhook');
+    btn.disabled = false;
+    if (r.ok) this.setStatus(st, true, '✓ Webhook configurado na Uzapi.');
+    else this.setStatus(st, false, '✗ ' + (r.data.error || 'Falhou') + ' — cole a URL acima manualmente no painel da Uzapi.');
+  },
+
+  async refreshConnection() {
+    const label = this.$('agent-conn-label');
     try {
-      const prompt = document.getElementById('agent-prompt').value.trim();
-      const openrouterKey = document.getElementById('agent-or-key').value.trim();
-      const model = document.getElementById('agent-model').value;
-      if (!prompt) { UI.addBanner('warning', 'Cole o prompt do agente ou envie um arquivo.'); return; }
-      if (!openrouterKey) { UI.addBanner('warning', 'Informe a chave da API OpenRouter.'); return; }
-
-      const res = await fetch('/api/agent/config', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt, docText: this.docText || '', openrouterKey, model,
-          schedulingEnabled: document.getElementById('agent-scheduling-enabled').checked,
-          googleClientId: document.getElementById('agent-google-client-id').value.trim(),
-          googleClientSecret: document.getElementById('agent-google-client-secret').value.trim(),
-        }),
-      });
-      const j = await res.json();
-      if (j.ok) {
-        localStorage.setItem('agent_or_key', openrouterKey);
-        UI.addBanner('info', '✓ Configuração salva! Agente ativo.');
-        // Auto-ativa badge se campo preenchido
-        if (openrouterKey) this.updateBadge(true);
-      } else {
-        UI.addBanner('error', 'Erro ao salvar configuração.');
-      }
-    } catch (err) {
-      UI.addBanner('error', 'Erro: ' + err.message);
-    } finally {
-      btn.disabled = false; btn.textContent = '💾 Salvar configuração';
-    }
+      const list = await API.getAllInstances();
+      const inst = list[0];
+      if (!inst) { label.textContent = 'WhatsApp não configurado'; label.style.color = 'var(--text-3)'; return; }
+      label.textContent = inst.connected ? '● WhatsApp conectado' : '● WhatsApp desconectado';
+      label.style.color = inst.connected ? '#4ade80' : '#f87171';
+    } catch (_) { label.textContent = ''; }
   },
 
-  async loadGoogleStatus() {
-    try {
-      const res = await fetch('/api/agent/google-status');
-      const j = await res.json();
-      const connBox  = document.getElementById('google-connected-box');
-      const loginBox = document.getElementById('google-login-box');
-      if (j.connected) {
-        connBox.style.display  = 'flex';
-        loginBox.style.display = 'none';
-        document.getElementById('google-connected-email').textContent = j.email;
-      } else {
-        connBox.style.display  = 'none';
-        loginBox.style.display = '';
-        // Mostra a URI de redirecionamento correta para o usuário copiar
-        const uri = window.location.protocol + '//' + window.location.host + '/api/agent/google-callback';
-        const el = document.getElementById('oauth-redirect-uri');
-        if (el) el.textContent = uri;
-      }
-    } catch (_) {}
+  // ── Grupo de destino dos leads qualificados ─────────────
+  renderGroups(groups, selectedId) {
+    const sel = this.$('agent-group-select');
+    sel.innerHTML = '';
+    if (!groups.length) sel.appendChild(new Option('— Clique em “Buscar meus grupos” —', ''));
+    else sel.appendChild(new Option('— Escolha o grupo —', ''));
+    groups.forEach(g => {
+      const label = (g.name || '(grupo sem nome)') + (g.size ? ` · ${g.size} membros` : '') + (g.name ? '' : ` · ${g.id}`);
+      const opt = new Option(label, g.id);
+      opt.dataset.name = g.name || '';
+      sel.appendChild(opt);
+    });
+    if (selectedId) sel.value = selectedId;
   },
 
-  googleLogin() {
-    // Abre o fluxo OAuth do Google (servidor redireciona para accounts.google.com)
-    window.location.href = '/api/agent/google-auth';
+  async searchGroups() {
+    const btn = this.$('btn-agent-groups'), st = this.$('agent-group-status');
+    btn.disabled = true; btn.textContent = '⏳ Buscando...'; this.setStatus(st, null, 'Buscando os grupos do seu WhatsApp...');
+    const r = await this.api('GET', '/api/agent/groups');
+    btn.disabled = false; btn.textContent = '🔎 Buscar meus grupos';
+    if (!r.ok) { this.setStatus(st, false, '✗ ' + (r.data.error || 'HTTP ' + r.status)); return; }
+    const groups = r.data.groups || [];
+    this.renderGroups(groups, this.$('agent-group-id').value.trim());
+    if (!groups.length) {
+      this.setStatus(st, false, 'A Uzapi não retornou nenhum grupo. Informe o ID ou o link de convite abaixo.');
+      this.$('agent-group-manual').open = true;
+    } else this.setStatus(st, true, `✓ ${groups.length} grupo(s) encontrado(s). Escolha o grupo que vai receber os leads.`);
   },
 
-  async googleDisconnect() {
-    if (!confirm('Desconectar a conta do Google?')) return;
-    await fetch('/api/agent/google-disconnect', { method: 'POST' });
-    await this.loadGoogleStatus();
-    document.getElementById('calendar-test-status').textContent = '';
+  // Guarda o grupo escolhido na hora (o teste e o agente usam o que está salvo)
+  async saveGroup(id, name) {
+    const st = this.$('agent-group-status');
+    this.$('agent-group-id').value = id;
+    this.groupName = name || '';
+    const r = await this.api('POST', '/api/agent/config', { handoffGroupId: id, handoffGroupName: this.groupName });
+    if (r.ok) this.setStatus(st, true, `✓ Grupo salvo${name ? ': ' + name : ''}.`);
+    else this.setStatus(st, false, '✗ Não consegui salvar o grupo: ' + (r.data.error || 'HTTP ' + r.status));
   },
 
-  async testCalendar() {
-    const btn = document.getElementById('btn-test-calendar');
-    const statusEl = document.getElementById('calendar-test-status');
-    btn.disabled = true; btn.textContent = '⏳ Testando...';
-    statusEl.style.color = 'var(--text-3)'; statusEl.textContent = 'Conectando ao Google Agenda...';
-    try {
-      const res = await fetch('/api/agent/test-calendar', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-      const j = await res.json();
-      if (!res.ok || j.error) {
-        statusEl.style.color = '#f87171';
-        statusEl.textContent = '✗ ' + (j.error || 'Erro desconhecido');
-        return;
-      }
-      if (!j.slots || j.slots.length === 0) {
-        statusEl.style.color = '#fbbf24';
-        statusEl.textContent = '⚠ Conectado! Mas não há horários livres nos próximos dias (11h–17h, seg–sex).';
-        return;
-      }
-      statusEl.style.color = '#4ade80';
-      statusEl.textContent = '✓ Calendário conectado! Próximos horários livres: ' + j.slots.map(s => s.brt).join(' | ');
-    } catch (err) {
-      statusEl.style.color = '#f87171';
-      statusEl.textContent = '✗ Falha: ' + err.message;
-    } finally {
-      btn.disabled = false; btn.textContent = '🗓 Testar conexão com calendário';
-    }
+  async onGroupPick() {
+    const sel = this.$('agent-group-select');
+    if (!sel.value) return;
+    await this.saveGroup(sel.value, sel.selectedOptions[0].dataset.name || '');
   },
 
-  async testKey() {
-    const key = document.getElementById('agent-or-key').value.trim();
-    const statusEl = document.getElementById('agent-key-status');
-    if (!key) { statusEl.style.color = '#f87171'; statusEl.textContent = '⚠ Insira a chave antes de testar.'; return; }
-    const btn = document.getElementById('btn-agent-test-key');
-    btn.disabled = true; btn.textContent = '⏳ Buscando modelos...';
-    statusEl.style.color = 'var(--text-3)'; statusEl.textContent = 'Consultando OpenRouter e testando modelos disponíveis...';
-    try {
-      const res = await fetch('/api/agent/probe-models', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key }),
-      });
-      const j = await res.json();
-      if (!res.ok || j.error) {
-        statusEl.style.color = '#f87171';
-        statusEl.textContent = '✗ ' + (j.error || 'Chave inválida ou sem acesso');
-        return;
-      }
-      if (!j.workingModel) {
-        statusEl.style.color = '#fbbf24';
-        statusEl.textContent = '⚠ Chave válida mas sem modelos gratuitos disponíveis. Verifique sua conta no OpenRouter.';
-        return;
-      }
-
-      // Popula dropdown só com modelos que existem
-      const sel = document.getElementById('agent-model');
-      const prevVal = sel.value;
-      sel.innerHTML = '';
-      j.models.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name + (m.id === j.workingModel ? ' ✓' : '');
-        sel.appendChild(opt);
-      });
-      sel.value = j.workingModel; // seleciona o que funcionou
-
-      statusEl.style.color = '#4ade80';
-      statusEl.textContent = `✓ API funcionando! ${j.models.length} modelos gratuitos carregados. Usando: ${j.workingModel}`;
-      localStorage.setItem('agent_or_key', key);
-    } catch (err) {
-      statusEl.style.color = '#f87171';
-      statusEl.textContent = '✗ Falha de conexão: ' + err.message;
-    } finally {
-      btn.disabled = false; btn.textContent = '🔬 Testar';
-    }
+  async resolveInvite() {
+    const invite = this.$('agent-group-invite').value.trim();
+    const btn = this.$('btn-agent-invite'), st = this.$('agent-group-status');
+    btn.disabled = true; this.setStatus(st, null, 'Consultando o link de convite...');
+    const r = await this.api('POST', '/api/agent/groups/invite', { invite });
+    btn.disabled = false;
+    if (!r.ok) { this.setStatus(st, false, '✗ ' + (r.data.error || 'HTTP ' + r.status)); return; }
+    const g = (r.data.groups || [])[0];
+    if (!g) { this.setStatus(st, false, 'A Uzapi não devolveu o ID desse grupo. Cole o ID manualmente no campo ao lado.'); return; }
+    this.renderGroups([g], g.id);
+    await this.saveGroup(g.id, g.name);
   },
 
-  // ── Chat de teste ────────────────────────────────────────
+  async testGroup() {
+    const btn = this.$('btn-agent-group-test'), st = this.$('agent-group-test-status');
+    const typed = this.$('agent-group-id').value.trim();
+    btn.disabled = true; this.setStatus(st, null, 'Enviando...');
+    if (typed) await this.saveGroup(typed, this.groupName);   // garante que o teste usa o grupo que está na tela
+    const r = await this.api('POST', '/api/agent/handoff-test');
+    btn.disabled = false;
+    if (r.ok) this.setStatus(st, true, '✓ Mensagem enviada! Confira no grupo se ela chegou.');
+    else this.setStatus(st, false, '✗ ' + (r.data.error || 'HTTP ' + r.status));
+  },
+
+  // ── Chat de teste ───────────────────────────────────────
   chatAddMsg(role, text) {
-    const box = document.getElementById('chat-test-box');
-    const empty = document.getElementById('chat-empty');
+    const box = this.$('chat-test-box');
+    const empty = this.$('chat-empty');
     if (empty) empty.remove();
-
     const wrap = document.createElement('div');
     wrap.className = 'chat-msg ' + (role === 'user' ? 'user' : 'agent');
-
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble';
     bubble.textContent = text;
-
     const meta = document.createElement('div');
     meta.className = 'chat-meta';
     meta.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-    wrap.appendChild(bubble);
-    wrap.appendChild(meta);
+    wrap.appendChild(bubble); wrap.appendChild(meta);
     box.appendChild(wrap);
     box.scrollTop = box.scrollHeight;
-    return wrap;
   },
 
-  chatShowTyping() {
-    const box = document.getElementById('chat-test-box');
+  chatNote(text) {
+    const box = this.$('chat-test-box');
     const div = document.createElement('div');
-    div.className = 'chat-msg agent';
-    div.id = 'chat-typing-indicator';
+    div.style.cssText = 'text-align:center;font-size:11.5px;color:#4ade80;padding:4px 0';
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  },
+
+  chatTyping(on) {
+    const old = this.$('chat-typing-indicator');
+    if (old) old.remove();
+    if (!on) return;
+    const box = this.$('chat-test-box');
+    const div = document.createElement('div');
+    div.className = 'chat-msg agent'; div.id = 'chat-typing-indicator';
     div.innerHTML = '<div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>';
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
   },
 
-  chatHideTyping() {
-    const el = document.getElementById('chat-typing-indicator');
-    if (el) el.remove();
-  },
-
   async chatSend() {
-    const input = document.getElementById('chat-test-input');
+    const input = this.$('chat-test-input');
     const text = input.value.trim();
     if (!text) return;
-
-    const key = document.getElementById('agent-or-key').value.trim();
-    if (!key) { UI.addBanner('warning', 'Insira e salve a chave OpenRouter antes de testar.'); return; }
-
-    const btn = document.getElementById('btn-chat-send');
-    btn.disabled = true;
-    input.value = '';
-    input.style.height = 'auto';
-
+    const btn = this.$('btn-chat-send');
+    btn.disabled = true; input.value = ''; input.style.height = 'auto';
     this.chatAddMsg('user', text);
     this.chatHistory.push({ role: 'user', content: text });
-    this.chatShowTyping();
-
-    try {
-      const model = document.getElementById('agent-model').value;
-      const prompt = document.getElementById('agent-prompt').value.trim();
-      const res = await fetch('/api/agent/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key, model, prompt, docText: this.docText, messages: this.chatHistory }),
-      });
-      const j = await res.json();
-      this.chatHideTyping();
-      if (j.ok && j.reply) {
-        this.chatHistory.push({ role: 'assistant', content: j.reply });
-        this.chatAddMsg('agent', j.reply);
-      } else {
-        this.chatAddMsg('agent', '⚠ Erro: ' + (j.error || 'sem resposta'));
-      }
-    } catch (err) {
-      this.chatHideTyping();
-      this.chatAddMsg('agent', '⚠ Falha de conexão: ' + err.message);
-    } finally {
-      btn.disabled = false;
+    this.chatTyping(true);
+    const r = await this.api('POST', '/api/agent/chat', {
+      prompt: this.$('agent-prompt').value.trim(), messages: this.chatHistory,
+      aiKey: this.$('agent-ai-key').value.trim(),
+      aiBaseUrl: this.$('agent-ai-base').value.trim(), aiModel: this.$('agent-ai-model').value.trim(),
+    });
+    this.chatTyping(false);
+    btn.disabled = false;
+    if (r.ok && r.data.reply) {
+      this.chatHistory.push({ role: 'assistant', content: r.data.reply });
+      this.chatAddMsg('agent', r.data.reply);
+      if (r.data.status === 'qualificado') this.chatNote('🟢 Aqui o agente consideraria o lead qualificado e enviaria o resumo ao grupo.');
+    } else {
+      this.chatAddMsg('agent', '⚠ Erro: ' + (r.data.error || 'sem resposta'));
     }
   },
 
+  // ── Ligar/desligar o agente ─────────────────────────────
   async toggle() {
-    try {
-      const res = await fetch('/api/agent/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      const j = await res.json();
-      this.updateBadge(j.active);
-      this.addLog(j.active ? 'Agente ativado ✓' : 'Agente desativado', j.active ? 'sent' : 'err');
-    } catch (err) {
-      UI.addBanner('error', 'Erro ao alternar agente: ' + err.message);
-    }
+    const r = await this.api('POST', '/api/agent/toggle', {});
+    if (!r.ok) { UI.addBanner('error', 'Erro ao alternar agente: ' + (r.data.error || 'HTTP ' + r.status)); return; }
+    this.updateBadge(r.data.active);
   },
 
   updateBadge(active) {
-    const badge = document.getElementById('agent-badge');
-    const btn = document.getElementById('btn-toggle-agent');
-    if (active) {
-      badge.textContent = 'Ativo';
-      badge.className = 'agent-badge on';
-      btn.textContent = '⏹ Desativar Agente';
-      btn.className = 'btn-toggle-agent deactivate';
-    } else {
-      badge.textContent = 'Inativo';
-      badge.className = 'agent-badge off';
-      btn.textContent = '⚡ Ativar Agente';
-      btn.className = 'btn-toggle-agent activate';
-    }
+    const badge = this.$('agent-badge'), btn = this.$('btn-toggle-agent');
+    badge.textContent = active ? 'Ativo' : 'Inativo';
+    badge.className = 'agent-badge ' + (active ? 'on' : 'off');
+    btn.textContent = active ? '⏹ Desativar Agente' : '⚡ Ativar Agente';
+    btn.className = 'btn-toggle-agent ' + (active ? 'deactivate' : 'activate');
   },
 
+  // ── Prompt por arquivo (PDF/TXT/MD) ─────────────────────
   async readDoc(file) {
-    const nameEl = document.getElementById('agent-doc-name');
-    const errEl = document.getElementById('agent-doc-err');
+    const nameEl = this.$('agent-doc-name'), errEl = this.$('agent-doc-err');
     errEl.classList.add('hidden');
-
-    if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-      const text = (await file.text()).trim();
-      document.getElementById('agent-prompt').value = text;
-      nameEl.textContent = '📄 ' + file.name + ' (' + text.length + ' chars)';
+    const done = (text, label) => {
+      this.$('agent-prompt').value = text;
+      nameEl.textContent = `📄 ${file.name} — ${label}${text.length} caracteres`;
       nameEl.classList.remove('hidden');
-      return;
-    }
-
-    if (file.name.endsWith('.pdf')) {
-      nameEl.textContent = '⏳ Lendo PDF...';
-      nameEl.classList.remove('hidden');
+    };
+    if (/\.(txt|md)$/i.test(file.name)) { done((await file.text()).trim(), ''); return; }
+    if (/\.pdf$/i.test(file.name)) {
+      nameEl.textContent = '⏳ Lendo PDF...'; nameEl.classList.remove('hidden');
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         let text = '';
         for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
+          const content = await (await pdf.getPage(i)).getTextContent();
           text += content.items.map(s => s.str).join(' ') + '\n';
         }
-        text = text.trim();
-        document.getElementById('agent-prompt').value = text;
-        nameEl.textContent = '📄 ' + file.name + ' — ' + pdf.numPages + ' pág. (' + text.length + ' chars)';
+        done(text.trim(), `${pdf.numPages} pág., `);
       } catch (err) {
         errEl.textContent = 'Erro ao ler PDF: ' + err.message;
-        errEl.classList.remove('hidden');
-        nameEl.classList.add('hidden');
+        errEl.classList.remove('hidden'); nameEl.classList.add('hidden');
       }
       return;
     }
-
     errEl.textContent = 'Formato não suportado. Use PDF, TXT ou MD.';
     errEl.classList.remove('hidden');
   },
 
+  // ── Conversas ───────────────────────────────────────────
   async loadConversations() {
-    try {
-      const res = await fetch('/api/agent/conversations');
-      const j = await res.json();
-      const listEl = document.getElementById('conversations-list');
-      if (!j.ok || !j.conversations.length) {
-        listEl.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhuma conversa ainda. O agente registra aqui assim que receber a primeira mensagem.</div>';
-        return;
-      }
-      listEl.innerHTML = '';
-      const STATUS_BADGE = {
-        potencial:      { label: 'Potencial',      bg: 'rgba(34,197,94,.15)',  color: '#4ade80', border: 'rgba(34,197,94,.35)' },
-        desqualificado: { label: 'Não qualificado', bg: 'rgba(239,68,68,.15)',  color: '#f87171', border: 'rgba(239,68,68,.35)' },
-        agencia:        { label: 'Tem agência',     bg: 'rgba(249,115,22,.15)', color: '#fb923c', border: 'rgba(249,115,22,.35)' },
+    const listEl = this.$('conversations-list');
+    const r = await this.api('GET', '/api/agent/conversations');
+    if (!r.ok || !r.data.ok) return;
+    const convs = r.data.conversations || [];
+    if (!convs.length) {
+      listEl.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:8px 0">Nenhuma conversa ainda. O agente registra aqui assim que receber a primeira mensagem.</div>';
+      return;
+    }
+    const BADGE = {
+      potencial:      { label: 'Qualificado · enviado ao grupo', bg: 'rgba(34,197,94,.15)',  color: '#4ade80', border: 'rgba(34,197,94,.35)' },
+      desqualificado: { label: 'Sem interesse',                   bg: 'rgba(239,68,68,.15)',  color: '#f87171', border: 'rgba(239,68,68,.35)' },
+    };
+    const pill = (b, label) => `<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;background:${b.bg};color:${b.color};border:1px solid ${b.border};margin-left:8px;vertical-align:middle">${label}</span>`;
+    const PENDING = { bg: 'rgba(249,115,22,.15)', color: '#fb923c', border: 'rgba(249,115,22,.35)' };
+    listEl.innerHTML = convs.map(c => {
+      const b = BADGE[c.status];
+      return `<div class="conv-item">
+        <div style="flex:1;min-width:0">
+          <div class="conv-phone">📱 ${esc(c.phone)}${b ? pill(b, b.label) : ''}${c.pending && !c.disabled ? pill(PENDING, '⚠ sem resposta') : ''}</div>
+          <div class="conv-preview">${esc(c.lastMsg || '—')}</div>
+        </div>
+        <div class="conv-count">${c.msgCount} msgs</div>
+        <div class="conv-toggle">
+          <span style="font-size:11px;color:${c.disabled ? '#f87171' : '#4ade80'}">${c.disabled ? 'IA off' : 'IA on'}</span>
+          <label class="toggle-label" style="gap:4px">
+            <input type="checkbox" ${c.disabled ? '' : 'checked'} data-phone="${esc(c.phone)}" class="conv-ai-toggle" />
+            <span class="toggle-switch"></span>
+          </label>
+          <button class="btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" data-del="${esc(c.phone)}" title="Apagar histórico">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+    listEl.querySelectorAll('.conv-ai-toggle').forEach(chk => {
+      chk.onchange = async () => {
+        await this.api('POST', '/api/agent/conversation-toggle', { phone: chk.dataset.phone, disabled: !chk.checked });
+        this.loadConversations();
       };
-      j.conversations.forEach(c => {
-        const item = document.createElement('div');
-        item.className = 'conv-item';
-        const b = STATUS_BADGE[c.status];
-        const badge = b ? `<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;background:${b.bg};color:${b.color};border:1px solid ${b.border};margin-left:8px;vertical-align:middle">${b.label}</span>` : '';
-        item.innerHTML = `
-          <div style="flex:1;min-width:0">
-            <div class="conv-phone">📱 ${esc(c.phone)}${badge}</div>
-            <div class="conv-preview">${esc(c.lastMsg || '—')}</div>
-          </div>
-          <div class="conv-count">${c.msgCount} msgs</div>
-          <div class="conv-toggle">
-            <span style="font-size:11px;color:${c.disabled ? '#f87171' : '#4ade80'}">${c.disabled ? 'IA off' : 'IA on'}</span>
-            <label class="toggle-label" style="gap:4px">
-              <input type="checkbox" ${c.disabled ? '' : 'checked'} data-phone="${esc(c.phone)}" class="conv-ai-toggle" />
-              <span class="toggle-switch"></span>
-            </label>
-            <button class="btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" data-del="${esc(c.phone)}" title="Apagar histórico">🗑</button>
-          </div>`;
-        listEl.appendChild(item);
-      });
-
-      listEl.querySelectorAll('.conv-ai-toggle').forEach(chk => {
-        chk.onchange = async () => {
-          const phone = chk.dataset.phone;
-          await fetch('/api/agent/conversation-toggle', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, disabled: !chk.checked }),
-          });
-          this.loadConversations();
-        };
-      });
-      listEl.querySelectorAll('[data-del]').forEach(btn => {
-        btn.onclick = async () => {
-          if (!confirm(`Apagar histórico de ${btn.dataset.del}?`)) return;
-          await fetch(`/api/agent/conversation/${encodeURIComponent(btn.dataset.del)}`, { method: 'DELETE' });
-          this.loadConversations();
-        };
-      });
-    } catch (_) {}
+    });
+    listEl.querySelectorAll('[data-del]').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm(`Apagar o histórico de ${btn.dataset.del}?`)) return;
+        await this.api('DELETE', `/api/agent/conversation/${encodeURIComponent(btn.dataset.del)}`);
+        this.loadConversations();
+      };
+    });
   },
 
-  startConvPoll() {
-    if (this.convPollTimer) return;
-    this.convPollTimer = setInterval(() => this.loadConversations(), 15000);
-  },
-
-  addLog(text, type) {
-    const log = document.getElementById('agent-log');
-    const first = log.querySelector('[style*="text-3"]');
-    if (first) first.remove();
-    const line = document.createElement('div');
-    line.className = 'agent-log-line ' + (type || 'recv');
-    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    line.textContent = '[' + now + '] ' + text;
-    log.insertBefore(line, log.firstChild);
-    while (log.children.length > 100) log.removeChild(log.lastChild);
-  },
+  // ── Inicialização ───────────────────────────────────────
+  onShow() { this.loadConversations(); this.refreshConnection(); },
 
   init() {
-    // Botões config
-    // Toggle seção calendário
-    document.getElementById('agent-scheduling-enabled').onchange = e => {
-      document.getElementById('calendar-fields').style.display = e.target.checked ? '' : 'none';
-    };
-    document.getElementById('btn-google-login').onclick = () => this.googleLogin();
-    document.getElementById('btn-google-disconnect').onclick = () => this.googleDisconnect();
-    document.getElementById('btn-test-calendar').onclick = () => this.testCalendar();
+    const box = this.$('webhook-url-box');
+    const url = window.location.origin + '/api/agent/webhook';
+    box.textContent = url;
+    box.onclick = () => navigator.clipboard.writeText(url).then(() => {
+      box.textContent = '✓ Copiado!';
+      setTimeout(() => { box.textContent = url; }, 1800);
+    });
 
-    document.getElementById('btn-agent-save').onclick = () => this.save();
-    document.getElementById('btn-toggle-agent').onclick = () => this.toggle();
-    document.getElementById('btn-agent-test-key').onclick = () => this.testKey();
-
-    document.getElementById('btn-uzapi-toggle-token').onclick = () => {
-      const inp = document.getElementById('uzapi-token');
-      inp.type = inp.type === 'password' ? 'text' : 'password';
-    };
-    document.getElementById('btn-uzapi-save').onclick = () => this.saveUzapi();
-    document.getElementById('btn-uzapi-test').onclick = () => this.testUzapi();
-    this.loadUzapi();
-    document.getElementById('btn-agent-clear-log').onclick = () => {
-      document.getElementById('agent-log').innerHTML = '<div class="agent-log-line" style="color:var(--text-3)">Log limpo.</div>';
-    };
-
-    // Visibilidade chave
-    document.getElementById('btn-agent-toggle-key').onclick = () => {
-      const inp = document.getElementById('agent-or-key');
-      inp.type = inp.type === 'password' ? 'text' : 'password';
-    };
-
-    // Chat de teste
-    document.getElementById('btn-chat-send').onclick = () => this.chatSend();
-    document.getElementById('btn-chat-clear').onclick = () => {
+    const on = (id, fn) => { this.$(id).onclick = fn; };
+    on('btn-toggle-agent', () => this.toggle());
+    on('btn-agent-save', () => this.save());
+    on('btn-uzapi-save', () => this.saveUzapi());
+    on('btn-uzapi-test', () => this.testUzapi());
+    on('btn-uzapi-webhook', () => this.configureWebhook());
+    on('btn-agent-test-ai', () => this.testAI());
+    on('btn-agent-groups', () => this.searchGroups());
+    on('btn-agent-invite', () => this.resolveInvite());
+    on('btn-agent-group-test', () => this.testGroup());
+    on('btn-chat-send', () => this.chatSend());
+    on('btn-refresh-convs', () => this.loadConversations());
+    on('btn-agent-upload-doc', () => this.$('agent-doc-file').click());
+    const toggleVis = (btnId, inputId) => on(btnId, () => { const i = this.$(inputId); i.type = i.type === 'password' ? 'text' : 'password'; });
+    toggleVis('btn-uzapi-toggle-token', 'uzapi-token');
+    toggleVis('btn-agent-toggle-key', 'agent-ai-key');
+    on('btn-chat-clear', () => {
       this.chatHistory = [];
-      document.getElementById('chat-test-box').innerHTML = '<div class="chat-empty" id="chat-empty">Conversa limpa. Envie uma mensagem para começar.</div>';
-    };
-    const chatInput = document.getElementById('chat-test-input');
-    chatInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.chatSend(); }
-    });
-    chatInput.addEventListener('input', () => {
-      chatInput.style.height = 'auto';
-      chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+      this.$('chat-test-box').innerHTML = '<div class="chat-empty" id="chat-empty">Conversa limpa. Envie uma mensagem para começar.</div>';
     });
 
-    // Upload documento (PDF/TXT/MD) — vira o prompt do agente
-    document.getElementById('btn-agent-upload-doc').onclick = () => document.getElementById('agent-doc-file').click();
-    document.getElementById('agent-doc-file').onchange = e => {
-      if (e.target.files[0]) this.readDoc(e.target.files[0]);
-    };
+    this.$('agent-ai-preset').onchange = () => this.onPresetChange();
+    this.$('agent-group-select').onchange = () => this.onGroupPick();
+    this.$('agent-doc-file').onchange = e => { if (e.target.files[0]) this.readDoc(e.target.files[0]); e.target.value = ''; };
+    const chatInput = this.$('chat-test-input');
+    chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.chatSend(); } });
+    chatInput.addEventListener('input', () => { chatInput.style.height = 'auto'; chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px'; });
 
-    document.getElementById('btn-refresh-convs').onclick = () => this.loadConversations();
-
-    this.loadInstances();
     this.loadConfig();
+    this.loadUzapi();
     this.loadConversations();
-    this.startConvPoll();
-  },
-
-  async loadUzapi() {
-    try {
-      const j = await fetch('/api/agent/uzapi-settings').then(r => r.json());
-      document.getElementById('uzapi-username').value = j.uzapiUsername || '';
-      document.getElementById('uzapi-phoneid').value = j.uzapiPhoneId || '';
-      const tokStatus = document.getElementById('uzapi-token-status');
-      tokStatus.textContent = j.hasToken ? '✓ Token salvo (deixe em branco para manter o atual).' : 'Nenhum token salvo ainda.';
-      tokStatus.style.color = j.hasToken ? '#4ade80' : 'var(--text-3)';
-    } catch (_) {}
-  },
-
-  async saveUzapi() {
-    const uzapiUsername = document.getElementById('uzapi-username').value.trim();
-    const uzapiPhoneId = document.getElementById('uzapi-phoneid').value.trim();
-    const uzapiToken = document.getElementById('uzapi-token').value.trim();
-    const btn = document.getElementById('btn-uzapi-save'); btn.disabled = true; btn.textContent = 'Salvando...';
-    try {
-      const r = await fetch('/api/agent/uzapi-settings', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waProvider: 'uzapi', uzapiUsername, uzapiPhoneId, uzapiToken }),
-      });
-      if (!r.ok) throw new Error('Erro ao salvar');
-      document.getElementById('uzapi-token').value = '';
-      UI.addBanner('info', '✓ Credenciais da Uzapi salvas.');
-      this.loadUzapi();
-    } catch (err) { UI.addBanner('error', 'Erro ao salvar: ' + err.message); }
-    finally { btn.disabled = false; btn.textContent = '💾 Salvar'; }
-  },
-
-  async testUzapi() {
-    const status = document.getElementById('uzapi-test-status');
-    const btn = document.getElementById('btn-uzapi-test'); btn.disabled = true; btn.textContent = '⏳ Testando...';
-    status.style.color = 'var(--text-3)'; status.textContent = 'Consultando a instância na Uzapi...';
-    try {
-      const r = await fetch('/api/agent/uzapi-test', { method: 'POST' });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
-      status.style.color = '#4ade80';
-      status.textContent = '✓ Conexão OK! ' + (j.status ? JSON.stringify(j.status).slice(0, 200) : '');
-    } catch (err) { status.style.color = '#f87171'; status.textContent = '✗ ' + err.message; }
-    finally { btn.disabled = false; btn.textContent = '🔬 Testar conexão'; }
+    this.refreshConnection();
+    if (!this.convPollTimer) this.convPollTimer = setInterval(() => this.loadConversations(), 15000);
   },
 };
 
@@ -4289,7 +4107,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tab-agente').onclick = () => {
     showPanel('agente'); setActiveNav('tab-agente');
     document.getElementById('page-title').textContent = 'WhatsApp / Agente';
-    Agent.autoProbeKey(); Agent.loadConversations();
+    Agent.onShow();
   };
   Agent.init();
   CRM.init();
@@ -4297,27 +4115,6 @@ document.addEventListener('DOMContentLoaded', () => {
   Lists.init();
   CRM.load(); // CRM é a aba inicial
 
-  // Detecta retorno do OAuth do Google e exibe resultado
-  const _qp = new URLSearchParams(window.location.search);
-  if (_qp.has('google_ok') || _qp.has('google_error')) {
-    // Limpa a URL sem recarregar
-    history.replaceState({}, '', window.location.pathname);
-    // Muda para aba Agente
-    showPanel('agente'); setActiveNav('tab-agente');
-    document.getElementById('page-title').textContent = 'WhatsApp / Agente';
-    // Abre seção calendário
-    document.getElementById('agent-scheduling-enabled').checked = true;
-    document.getElementById('calendar-fields').style.display = '';
-
-    if (_qp.has('google_ok')) {
-      const email = decodeURIComponent(_qp.get('google_ok'));
-      UI.addBanner('info', '✅ Google conectado com sucesso: ' + email);
-      Agent.loadGoogleStatus();
-    } else {
-      const msg = decodeURIComponent(_qp.get('google_error') || 'erro_desconhecido');
-      UI.addBanner('error', '✗ Erro ao conectar com Google: ' + msg);
-    }
-  }
 });
 </script>
 </body>
